@@ -1,0 +1,1340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+
+ <link rel="icon" type="image/png" href="favicon de 2.PNG">
+
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Last Guardians</title>
+<style>
+  :root {
+    --bg: #f3f4f6;
+    --board: #58b368;
+    --border: #cbd0d8;
+    --text: #1f2430;
+    --player: #e11d2e;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161b;
+      --board: #2f7a45;
+      --border: #3a3f4b;
+      --text: #e6e8ee;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161b;
+    --board: #2f7a45;
+    --border: #3a3f4b;
+    --text: #e6e8ee;
+  }
+  html { color-scheme: light dark; scroll-padding-top: env(safe-area-inset-top, 0px); }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  canvas {
+    background: var(--board);
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    max-width: 94vw;
+    height: auto;
+    touch-action: none;
+  }
+  p { margin: 0; font-size: 0.95rem; opacity: 0.8; }
+</style>
+</head>
+<body>
+  <canvas id="c" width="480" height="360"></canvas>
+
+<script>
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d");
+  const GOLD = "#e3b52b";
+  // Mundo 3 veces más grande que la pantalla
+  const WORLD = { w: 6000, h: 4500 };
+  const ROOM = { w: 300, h: 200 }; // tamaño del interior de los edificios
+  const ISLANDS = [[2850, 2100, 300, 300]]; // isla en el centro del lago: solo se llega en barco
+  const WATER = [[2600, 1850, 800, 800], [2980, 0, 40, 1850], [2980, 2650, 40, 1850], [0, 2230, 2600, 40], [3400, 2230, 2600, 40]]; // lago central y 4 ríos // lago y ríos
+  const BRIDGES = [[2970, 500, 60, 48], [2970, 1500, 60, 48], [2970, 3200, 60, 48], [2970, 4000, 60, 48],
+    [800, 2220, 48, 60], [1900, 2220, 48, 60], [4100, 2220, 48, 60], [5200, 2220, 48, 60]];
+  const CITIES = [
+    { name: "Villa Aurora", x: 80, y: 20, w: 540, h: 510 },
+    { name: "Puerto Lago", x: 4900, y: 200, w: 480, h: 390 },
+    { name: "Monte Roble", x: 150, y: 3600, w: 480, h: 390 },
+    { name: "Ciudad Dorada", x: 5100, y: 3700, w: 510, h: 420 },
+    { name: "Aldea Brisa", x: 1500, y: 900, w: 480, h: 390 },
+    { name: "Valle Escarcha", x: 3700, y: 1000, w: 480, h: 390 },
+    { name: "Playa Coral", x: 1500, y: 3000, w: 480, h: 390 },
+    { name: "Fuerte Sol", x: 3800, y: 3000, w: 480, h: 390 }
+  ];
+  const inRect = (x, y, r) => x >= r[0] && x <= r[0] + r[2] && y >= r[1] && y <= r[1] + r[3];
+  const BNAMES = [
+    ["Gremio de Guardianes", "Aquí se registran los guardianes de todo el mundo."], ["Posada del Alba", "Descansas y recuperas toda la vida."],
+    ["Mercado del Puerto", "Aquí se venderán armas y pociones (¡pronto!)."], ["Taberna del Pez", "Huele a pescado frito y a aventuras."],
+    ["Herrería Roble", "Aquí se forjan las mejores espadas."], ["Templo del Bosque", "Un lugar tranquilo para pensar."],
+    ["Banco Dorado", "Aquí se guarda el dinero."], ["Arena de Batalla", "Aquí los guardianes se retan a duelo."],
+    ["Tienda de Armas", "Aquí se venden espadas, hachas y katanas."], ["Cervecería Brisa", "Espuma, risas y canciones."],
+    ["Refugio Escarcha", "Una chimenea encendida para los guardianes."], ["Forja de Hielo", "Espadas que nunca se calientan."],
+    ["Faro Coral", "Su luz guía a los barcos."], ["Mercado de Mariscos", "Huele a mar y a sal."],
+    ["Cuartel del Sol", "Aquí entrenan los guardianes más valientes."], ["Armería Solar", "Armas que brillan como el sol."]
+  ];
+  const GENERIC = [ // nombres para el resto de los edificios
+    ["Casa de la Abuela", "Huele a pan recién hecho."], ["Panadería", "Pan caliente para los guardianes."],
+    ["Biblioteca", "Libros sobre cosos de todos los niveles."], ["Herbolario", "Hierbas para curar heridas."],
+    ["Establo", "Aquí descansan los caballos."], ["Casa de Té", "Un té tranquilo antes de la batalla."],
+    ["Museo de Cosos", "Hay cosos disecados... ¡y uno parpadeó!"], ["Relojería", "Todos los relojes marcan la hora real."],
+    ["Zapatería", "Zapatos para caminar por todo el mundo."], ["Casa Vacía", "Nadie vive aquí... o eso parece."],
+    ["Taller", "Se oye martillar al fondo."], ["Casa del Pescador", "Redes y anzuelos por todas partes."],
+    ["Mercería", "Hilos de todos los colores."], ["Pastelería", "Los pasteles más dulces del mundo."],
+    ["Observatorio", "Desde aquí se ven las estrellas."]
+  ];
+  const OWNERS = "Ana Beto Carla Diego Elena Felipe Gala Hugo Irene Jaime Karla Luis Marta Nico Olga Pablo Rosa Sergio Tania Ugo Vera Wilson Ximena Yago Zoe Aitor Bruno Celia Dario Edna Fidel Gema Hector Ines Joel Kira Leon Mara Noa Omar Paz Quino Rita Saul Tula Uriel Vilma Willy Xavi Yara Zeta Abel Berta Cesar Dalia Elias Flor Gael Hilda Ivan Jana Kevin Lola Mateo Nora Oscar".split(" ");
+  const CHARMS = ["una chimenea", "un gato dormido", "plantas por todos lados", "un reloj de cuco", "una mesa con té", "una alfombra tejida"];
+  let gi = 0; // cuenta los edificios comunes para que ninguno se repita
+  const BUILDINGS = [];
+  CITIES.forEach((c, ci) => {
+    Array.from({ length: 12 }, (_, n) => [40 + (n % 4) * (c.w - 144) / 3, 50 + Math.floor(n / 4) * (c.h - 160) / 2]).forEach(([dx, dy], i) => { // 4 columnas x 3 filas
+      const b = { x: c.x + dx, y: c.y + dy, w: 64, h: 48 };
+      if (i < 2) { b.name = BNAMES[ci * 2 + i][0]; b.desc = BNAMES[ci * 2 + i][1]; b.special = true; } // los dos primeros son los importantes de cada ciudad
+      else { // los demás también se visitan y ninguno se repite
+        const n = gi++;
+        if (n < GENERIC.length) { b.name = GENERIC[n][0]; b.desc = GENERIC[n][1]; }
+        else if (n === GENERIC.length + 8) { b.name = "Establo"; b.desc = "Otro establo: aquí también se guardan caballos."; } // el único nombre que se repite
+        else { const o = OWNERS[(n - GENERIC.length) % OWNERS.length]; b.name = "Casa de " + o; b.desc = "La casa de " + o + ", con " + CHARMS[n % CHARMS.length] + "."; }
+      }
+      BUILDINGS.push(b);
+    });
+  });
+  const inVilla = (x, y) => inRect(x, y, [CITIES[0].x - 10, CITIES[0].y - 10, CITIES[0].w + 20, CITIES[0].h + 20]);
+  BUILDINGS.push({ x: 2900, y: 2130, w: 64, h: 48, name: "Tienda de la Isla", desc: "Una tienda secreta en medio del lago.", special: true, island: true });
+  const wet = (x, y) => WATER.some((r) => inRect(x, y, r)) && !BRIDGES.some((r) => inRect(x, y, r)) && !ISLANDS.some((r) => inRect(x, y, r));
+  const badPt = (px, py) => (WATER.some((r) => inRect(px, py, r)) && !BRIDGES.some((r) => inRect(px, py, r)) && !ISLANDS.some((r) => inRect(px, py, r))) ||
+    BUILDINGS.some((b) => inRect(px, py, [b.x, b.y, b.w, b.h]));
+  const blocked = (x, y) => badPt(x + 8, y + 40) || badPt(x + 32, y + 40); // los dos pies deben pisar tierra o puente
+  function freePos(x, y) { // si alguien queda en el agua o en un edificio, lo saca a tierra firme
+    if (!blocked(x, y)) return [x, y];
+    for (let r = 10; r <= 600; r += 10) {
+      for (let a = 0; a < 16; a++) {
+        const nx = x + Math.cos(a * Math.PI / 8) * r, ny = y + Math.sin(a * Math.PI / 8) * r;
+        if (nx >= 0 && ny >= 0 && nx <= WORLD.w - 40 && ny <= WORLD.h - 60 && !blocked(nx, ny)) return [nx, ny];
+      }
+    }
+    return [x, y];
+  }
+  const cityAt = (x, y) => CITIES.find((c) => inRect(x, y, [c.x, c.y, c.w, c.h]));
+
+  // Dos personajes iguales con tres diferencias: color del cuerpo, gema y kanji derecho
+  const players = [
+    {
+      x: 150, y: 170, size: 40, speed: 240,
+      controls: { left: "ArrowLeft", right: "ArrowRight", up: "ArrowUp", down: "ArrowDown" },
+      color: "#e11d2e",
+      gem: { main: "#2f86e8", light: "#8cc8ff", edge: "#14508a" },
+      kanji: "赤", // rojo
+      sword: { handle: "#1f4fd1", edge: "#102a78", gem: "#35a2ff", light: "#a9dcff", gemEdge: "#0e3f8a" }, // mango azul
+      facing: 1, // 1 = espada a la derecha, -1 = a la izquierda
+      idle: { x: 1, y: -1 }, // quieto, mira al noreste
+      look: { x: 1, y: -1 }
+    },
+    {
+      x: 290, y: 170, size: 40, speed: 240,
+      controls: { left: "a", right: "d", up: "w", down: "s" },
+      color: "#2563eb",
+      gem: { main: "#e03535", light: "#ff9a9a", edge: "#8a1414" },
+      kanji: "青", // azul
+      idle: { x: -1, y: -1 }, // quieto, mira al noroeste
+      sword: { handle: "#d32f2f", edge: "#7a1212", gem: "#ff4d4d", light: "#ffb3b3", gemEdge: "#8a1414" }, // mango rojo
+      facing: -1,
+      look: { x: -1, y: -1 }
+    },
+    {
+      x: 220, y: 60, size: 40, speed: 240, // en medio de los otros dos y más arriba
+      controls: { left: "j", right: "l", up: "i", down: "k" },
+      color: "#8a8f98",
+      gem: { main: "#2fb458", light: "#8ee6a8", edge: "#14693a" },
+      kanji: "灰", // gris
+      idle: { x: 0, y: 1 }, // quieto, mira hacia abajo
+      sword: { handle: "#2fa84f", edge: "#145a2a", gem: "#3fd16a", light: "#aef0c3", gemEdge: "#14693a" }, // mango verde
+      facing: 1,
+      look: { x: 0, y: 1 }
+    }
+  ];
+
+  // Vida de cada personaje (por ahora siempre llena)
+  // ---- Nivel, experiencia, dinero y combate por turnos ----
+  const WIN_KILLS = 30; // cosos que debe vencer cada guardián sin perder
+  let notice = { text: "", t: 0 }, banner = { text: "", t: 0 }, paused = false, showMap = false;
+  let slot = "1", dreamFx = 0, dreamer = null, showRadar = false, showInfo = false, idleT = 0, shiftDown = false, shiftUsed = false, peaceMode = false;
+  const gkey = (q) => "guardianes:" + slot + ":" + q.id; // la partida depende del modo elegido en el menú
+  const NAMES = ["Rojo", "Azul", "Gris"], ATK_KEYS = ["Enter", "e", "p"], CANCEL_KEYS = ["Escape", "c", "m"], CAP_KEYS = [",", "x", "o"]; // CAP_KEYS: atrapar coso
+  const xpNeeded = (lv) => 100 + 50 * (lv - 5); // cada nivel cuesta más que el anterior
+  function setStats(p) { p.maxHp = 80 + p.level * 4; }
+  function gainXp(p, n) {
+    p.xp += n;
+    while (p.xp >= xpNeeded(p.level)) { p.xp -= xpNeeded(p.level); p.level++; setStats(p); notice = { text: "¡" + p.name + " subió a nivel " + p.level + "!", t: 3.5 }; sfx("up"); }
+  }
+  players.forEach((p, i) => {
+    p.name = NAMES[i]; p.id = NAMES[i]; p.atkKey = ATK_KEYS[i];
+    p.sx0 = p.x; p.sy0 = p.y; // dónde empezó (aquí reaparece si muere)
+    p.level = 5; p.xp = 0; p.money = 500; p.hidden = false;
+    p.form = 1; p.weapons = 0; p.evo = null; p.noEvoBefore = 0; p.cancelKey = CANCEL_KEYS[i]; p.kills = 0; p.capKey = CAP_KEYS[i]; p.bags = 0; p.pets = []; // varias mascotas
+    p.potions = 0; p.hypers = 0; p.gun = 0; p.horse = false; p.potKey = ["v", "g", "t"][i]; p.hypKey = ["n", "h", "y"][i];
+    setStats(p); p.hp = p.maxHp;
+  });
+
+  // Espada como segmento (pomo → punta) en coordenadas del juego
+  function swordSeg(p) {
+    const sx = p.facing > 0 ? p.x + p.size + 13 : p.x - 13, sy = p.y + 14;
+    const cx = sx, cy = sy + 22, a = 0.25 * p.facing, c = Math.cos(a), s = Math.sin(a);
+    const rot = (x, y) => [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
+    return [...rot(sx, sy + 34), ...rot(sx, sy - (p.form > 1 ? 34 : 27))];
+  }
+  function ptSeg(px, py, g) {
+    const dx = g[2] - g[0], dy = g[3] - g[1];
+    const t = Math.max(0, Math.min(1, ((px - g[0]) * dx + (py - g[1]) * dy) / (dx * dx + dy * dy)));
+    return Math.hypot(px - g[0] - t * dx, py - g[1] - t * dy);
+  }
+  function swordsTouch(a, b) {
+    const s = swordSeg(a), t = swordSeg(b);
+    const o = (ax, ay, bx, by, cx, cy) => Math.sign((bx - ax) * (cy - ay) - (by - ay) * (cx - ax));
+    const cross = o(s[0], s[1], s[2], s[3], t[0], t[1]) !== o(s[0], s[1], s[2], s[3], t[2], t[3]) &&
+                  o(t[0], t[1], t[2], t[3], s[0], s[1]) !== o(t[0], t[1], t[2], t[3], s[2], s[3]);
+    const near = Math.min(ptSeg(s[0], s[1], t), ptSeg(s[2], s[3], t), ptSeg(t[0], t[1], s), ptSeg(t[2], t[3], s));
+    return cross || near < 6;
+  }
+
+  // ---- Sonido y música (se activan con la primera tecla) ----
+  let AC = null, musicStep = 0, musicTick = 0, musicMuteUntil = 0, lastMusic = null;
+  function audio() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (AC && AC.state === "suspended") AC.resume();
+  }
+  function blip(f0, f1, dur, type, vol, delay) {
+    if (!AC) return;
+    const t = AC.currentTime + (delay || 0), o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur);
+    return { g };
+  }
+  function sfx(kind) {
+    if (!started) return; // en la pantalla de inicio no suena nada
+    if (AC && (kind === "up" || kind === "save" || kind === "load")) { // solo con estos se calla la música; con los de batalla sigue
+      const quiet = { clash: 0.3, cut: 0.5, monster: 0.45, up: 0.55, save: 0.5, load: 0.75 }[kind] || 0.4;
+      musicMuteUntil = Math.max(musicMuteUntil, AC.currentTime + quiet);
+      if (lastMusic) { lastMusic.g.gain.cancelScheduledValues(AC.currentTime); lastMusic.g.gain.setTargetAtTime(0.0001, AC.currentTime, 0.02); }
+    }
+    if (kind === "clash") { blip(2400, 1600, 0.2, "square", 0.04); blip(3300, 2100, 0.14, "triangle", 0.04, 0.02); } // espadas
+    else if (kind === "cut") { blip(1500, 200, 0.15, "sawtooth", 0.05); blip(1000, 450, 0.3, "sawtooth", 0.05, 0.12); } // cortada + chillido del coso
+    else if (kind === "monster") { blip(200, 90, 0.2, "square", 0.06); blip(260, 110, 0.22, "square", 0.06, 0.16); } // el coso ataca
+    else if (kind === "up") { [523, 659, 784].forEach((f, i) => blip(f, f, 0.18, "triangle", 0.06, i * 0.12)); }
+    else if (kind === "save") { blip(660, 660, 0.12, "triangle", 0.18); blip(880, 880, 0.12, "triangle", 0.18, 0.1); blip(1320, 1320, 0.25, "triangle", 0.18, 0.2); } // campanita al guardar
+    else if (kind === "load") { blip(1000, 250, 0.4, "sawtooth", 0.1); blip(330, 330, 0.15, "square", 0.1, 0.4); blip(440, 440, 0.2, "square", 0.1, 0.52); } // "rebobinar" al reiniciar
+  }
+  const SONGS = {
+    day:    { every: 2, type: "triangle", notes: [262, 330, 392, 330, 294, 349, 440, 349] },
+    night:  { every: 3, type: "sine",     notes: [220, 262, 330, 262, 196, 247, 294, 247] },
+    battle: { every: 1, type: "sawtooth", notes: [196, 196, 233, 196, 262, 233, 294, 262] },
+    "Villa Aurora":  { every: 2, type: "triangle", notes: [262, 330, 392, 523, 392, 330, 294, 349] },
+    "Puerto Lago":   { every: 3, type: "sine",     notes: [294, 370, 440, 370, 330, 415, 494, 415] },
+    "Monte Roble":   { every: 2, type: "triangle", notes: [220, 262, 294, 330, 294, 262, 247, 262] },
+    "Ciudad Dorada": { every: 1, type: "triangle", notes: [392, 494, 587, 494, 440, 523, 659, 523] }
+  };
+  setInterval(() => { // una melodía para el día, otra para la noche (desde las 5 p. m.) y otra para la batalla
+    if (!AC || AC.state !== "running" || paused || !started || AC.currentTime < musicMuteUntil) return;
+    const cq = players.find((q) => !q.hidden && q.city); // la canción cambia según la ciudad donde estés
+    const song = SONGS[battle ? "battle" : cq ? cq.city.name : isNight() ? "night" : "day"];
+    if (++musicTick % song.every) return;
+    const f = song.notes[musicStep++ % song.notes.length];
+    lastMusic = blip(f, f, song.every * 0.22, song.type, 0.4);
+  }, 140);
+
+  // ---- Guardar partida: / rojo, Q azul, U gris ----
+  function savePlayer(q) {
+    try {
+      localStorage.setItem(gkey(q), JSON.stringify({ name: q.name, level: q.level, xp: q.xp, money: q.money, weapons: q.weapons, form: q.form, kills: q.kills, x: q.x, y: q.y,
+        inside: BUILDINGS.indexOf(q.inside), ix: q.ix, iy: q.iy, facing: q.facing, hp: q.hp, bags: q.bags, potions: q.potions, hypers: q.hypers, gun: q.gun, pets: q.pets.map((t) => ({ level: t.level, maxHp: t.maxHp, bagT: t.bagT })) }));
+      notice = { text: "Partida de " + q.name + " guardada", t: 2.5 }; sfx("save");
+    } catch (e) { notice = { text: "No se pudo guardar", t: 2.5 }; }
+  }
+  // Sin partida guardada (o tras reiniciar/nueva partida/morir) los guardianes aparecen dentro del Gremio de Guardianes
+  const GREMIO_SLOTS = [28, 228, 135]; // rojo a la izquierda, gris en medio, azul a la derecha
+  function placeAtGremio(q) {
+    const g = BUILDINGS.find((b) => b.name === "Gremio de Guardianes");
+    q.inside = g; q.x = g.x + 12; q.y = g.y + 24; // por si sale: junto a la puerta
+    q.ix = GREMIO_SLOTS[NAMES.indexOf(q.id)]; q.iy = 50;
+    q.facing = q.idle.x < 0 ? -1 : 1; q.enterCd = 1.2;
+  }
+  function respawnAtSave(q) {
+    let d = null; try { d = JSON.parse(localStorage.getItem(gkey(q))); } catch (e) {}
+    if (!d) { placeAtGremio(q); return; }
+    q.x = d.x; q.y = d.y; q.inside = d.inside >= 0 ? BUILDINGS[d.inside] : null; q.ix = d.ix; q.iy = d.iy; q.enterCd = 1.2;
+  }
+  function loadPlayer(q) {
+    try {
+      const d = JSON.parse(localStorage.getItem(gkey(q)));
+      if (!d) placeAtGremio(q);
+      if (d) { Object.assign(q, d); q.inside = d.inside >= 0 ? BUILDINGS[d.inside] : null; (q.pets || (q.pets = [])).forEach((t) => { t.x = q.x; t.y = q.y; }); setStats(q); q.hp = d.hp > 0 ? Math.min(d.hp, q.maxHp) : q.maxHp; }
+    } catch (e) { placeAtGremio(q); }
+  }
+  // Vuelve al último guardado; si nunca guardó, vuelve al inicio (nivel 5, 500 JD, donde empezó)
+  function restorePlayer(q) {
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(gkey(q))); } catch (e) {}
+    if (d) delete d.name; // el nombre solo se cambia al inicio
+    Object.assign(q, d || { level: 5, xp: 0, money: 500, weapons: 0, form: 1, kills: 0, bags: 0, pets: [], potions: 0, hypers: 0, gun: 0, x: q.sx0, y: q.sy0, inside: -1 });
+    q.inside = q.inside >= 0 ? BUILDINGS[q.inside] : null; // vuelve al lugar exacto: si guardó dentro de un edificio, vuelve ahí, en la misma esquina
+    if (!d) placeAtGremio(q); // sin guardado: vuelve al Gremio
+    (q.pets || (q.pets = [])).forEach((t) => { t.x = q.x; t.y = q.y; });
+    q.enterCd = 0; q.evo = null; q.noEvoBefore = 0; setStats(q); q.hp = d && d.hp > 0 ? Math.min(d.hp, q.maxHp) : q.maxHp; // vuelve con la vida que tenía al guardar
+    notice = { text: d ? "Partida de " + q.name + " reiniciada al último guardado" : q.name + " volvió al inicio (no había guardado)", t: 3 }; sfx("load");
+  }
+
+  // ---- Viajeros (NPC): de vez en cuando aparecen en las ciudades; a veces regalan armas ----
+  // ---- Tiendas: camina hasta el mostrador y pulsa 1, 2 o 3 ----
+  const heal = (q, pct) => { q.hp = Math.min(q.maxHp, q.hp + q.maxHp * pct); };
+  function sail(q, toIsland) { // el barco del pescador lleva a la isla y desde la tienda de la isla se vuelve gratis
+    const b = BUILDINGS.find((z) => z.name === (toIsland ? "Tienda de la Isla" : "Casa del Pescador"));
+    q.inside = null; q.x = b.x + 12; q.y = b.y + 24; q.enterCd = 1.5;
+    notice = { text: toIsland ? q.name + " navega hasta la Isla Tesoro" : q.name + " vuelve en barco a tierra firme", t: 4 };
+  }
+  const gunTier = (n) => (q) => (q.gun >= n ? "Ya tienes un arma igual o mejor" : null);
+  const SHOPS = { // [nombre, precio, comprar, motivo para no poder]
+    "Mercado del Puerto": [["Poción (+30% vida)", 60, (q) => q.potions++], ["Manzana (+8% vida)", 15, (q) => heal(q, 0.08)], ["Daga", 120, (q) => q.weapons++]],
+    "Tienda de la Isla": [["Hiperpoción (+70% vida)", 900, (q) => q.hypers++], ["Bolsa anti cosos", 3000, (q) => q.bags++], ["Volver en barco (gratis)", 0, (q) => sail(q, false)]],
+    "Taller": [["Pistola eléctrica anti cosos", 300, (q) => { q.gun = 1; }, gunTier(1)], ["Rifle de arcos eléctricos", 800, (q) => { q.gun = 2; }, gunTier(2)], ["Cañón Tesla", 1800, (q) => { q.gun = 3; }, gunTier(3)]],
+    "Establo": [["Caballo: 10 min (hasta las 5 p. m.)", 200, (q) => { q.horse = true; q.horseUntil = Date.now() + 600000; },
+      (q) => (isNight() ? "A los caballos no les gusta la noche: vuelve de día" : q.horse ? "Ya tienes un caballo" : null)]],
+    "Casa del Pescador": [["Barco a la Isla Tesoro", 2000, (q) => sail(q, true)]]
+  };
+  function shopper(b) { // atiende al que esté más cerca del mostrador
+    let best = null, bd = 90;
+    for (const q of players) { if (q.inside !== b) continue; const d = Math.hypot(q.ix + 20 - ROOM.w / 2, q.iy - 40); if (d < bd) { bd = d; best = q; } }
+    return best;
+  }
+  function buyAt(idx) {
+    new Set(players.filter((q) => q.inside && SHOPS[q.inside.name]).map((q) => q.inside)).forEach((b) => {
+      const it = SHOPS[b.name][idx], q = shopper(b);
+      if (!it || !q) return;
+      const why = it[3] && it[3](q);
+      if (why) { notice = { text: why, t: 3 }; return; }
+      if (q.money < it[1]) { notice = { text: q.name + " necesita " + it[1] + " JD (tiene " + q.money + ")", t: 3 }; return; }
+      q.money -= it[1]; notice = { text: q.name + " compró: " + it[0], t: 3 }; sfx("up");
+      it[2](q);
+    });
+  }
+  function usePotion(q, hyper) {
+    if (q.hidden || q.inside) return;
+    if ((hyper ? q.hypers : q.potions) <= 0) { notice = { text: q.name + " no tiene " + (hyper ? "hiperpociones" : "pociones"), t: 2 }; return; }
+    if (battle) { const att = battle.turn ? battle.b : battle.a; if (att !== q || battle.over) return; } // en batalla gasta tu turno
+    else if (q.hp >= q.maxHp) { notice = { text: q.name + " ya tiene la vida llena", t: 2 }; return; }
+    if (hyper) q.hypers--; else q.potions--;
+    heal(q, hyper ? 0.7 : 0.3); sfx("up");
+    notice = { text: q.name + " usó " + (hyper ? "una hiperpoción" : "una poción"), t: 3 };
+    if (battle) { battle.turn ^= 1; battle.wait = 0.9; battle.idle = 6; const nx = battle.turn ? battle.b : battle.a; battle.msg = q.name + " se cura. Turno de " + nx.name; }
+  }
+  function horseTick(q) { // los caballos no aguantan la noche
+    if (q.horse && (Date.now() > q.horseUntil || isNight())) { q.horse = false; notice = { text: "El caballo de " + q.name + " volvió al establo", t: 4 }; }
+  }
+  function drawHorse(bx, y, dir) {
+    ctx.save(); ctx.translate(bx + 20, y + 10);
+    ctx.fillStyle = "#7a4b25"; ctx.beginPath(); ctx.ellipse(0, 6, 36, 13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(dir * 26 - 5, -12, 10, 18);
+    ctx.beginPath(); ctx.ellipse(dir * 34, -14, 11, 7, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-26, 12, 6, 16); ctx.fillRect(-10, 12, 6, 16); ctx.fillRect(6, 12, 6, 16); ctx.fillRect(20, 12, 6, 16);
+    ctx.fillStyle = "#3a2210"; ctx.fillRect(-dir * 38 - 3, 4, 6, 16);
+    ctx.restore();
+  }
+
+  let npcs = [], npcT = 15;
+  const NPC_LINES = ["¿Has visto un coso con tres ojos? Yo tampoco.", "Dicen que la Posada del Alba tiene la mejor cama.", "Cuidado de noche: los cosos salen a pasear.", "Villa Aurora es muy segura, ¡ahí no entran cosos!", "Yo solo vendo historias, y hoy están baratas."];
+  const GIFTS = ["una daga", "un hacha", "un arco", "una lanza", "un martillo"];
+  function updateNpcs(dt) {
+    npcT -= dt;
+    if (npcT <= 0) {
+      npcT = 25 + Math.random() * 35;
+      // Los viajeros solo aparecen dentro de los edificios con nombre (menos el Gremio de Guardianes), uno por edificio
+      const libres = BUILDINGS.filter((z) => z.name && z.name !== "Gremio de Guardianes" && !npcs.some((n) => n.b === z));
+      if (npcs.length < 3 && libres.length) {
+        npcs.push({ b: libres[Math.floor(Math.random() * libres.length)], ix: 40 + Math.random() * (ROOM.w - 100), iy: 70 + Math.random() * (ROOM.h - 140),
+          t: 70, col: ["#e0a030", "#3aa0a0", "#c04080", "#6a6ad0"][Math.floor(Math.random() * 4)] });
+      }
+    }
+    for (const n of npcs) {
+      n.t -= dt;
+      for (const q of players) {
+        if (q.hidden || q.inside !== n.b || Math.hypot(q.ix + 20 - n.ix, q.iy + 30 - n.iy) > 40) continue; // hay que estar en la misma sala, cerca del viajero
+        const rr = Math.random();
+        if (rr < 0.05) { q.bags++; notice = { text: "¡Un viajero le regaló una bolsa anti cosos a " + q.name + "!", t: 4 }; sfx("up"); }
+        else if (rr < 0.45) { q.weapons++; notice = { text: "¡Un viajero le regaló " + GIFTS[Math.floor(Math.random() * GIFTS.length)] + " a " + q.name + "!", t: 4 }; sfx("up"); }
+        else notice = { text: "Viajero: " + NPC_LINES[Math.floor(Math.random() * NPC_LINES.length)], t: 4 };
+        n.t = 0; break;
+      }
+    }
+    npcs = npcs.filter((n) => n.t > 0);
+  }
+  function checkVictory() {
+    if (peaceMode || players.some((q) => q.kills < WIN_KILLS)) return;
+    peaceMode = true; monsters = []; // ya no llegan más cosos
+    const posada = BUILDINGS.find((b) => b.name === "Posada del Alba");
+    players.forEach((q, i) => { q.peace = true; q.inside = posada; q.ix = 50 + i * 80; q.iy = 110; q.hp = q.maxHp; });
+    banner = { text: "¡Salvaron al mundo!", t: 8 };
+    notice = { text: "Los tres guardianes descansan, sonrientes, en la Posada del Alba", t: 8 };
+    try { localStorage.setItem("guardianes:" + slot + ":mundo", "salvado"); } catch (e) {}
+  }
+  // Atrapar: con bolsa, y el coso debilitado (menos del 30% de vida). Si está fuerte, rompe la bolsa y te pega.
+  function tryCapture(q, m) {
+    if (q.bags <= 0) { battle.msg = "No tienes bolsa anti cosos"; return; }
+    q.bags--;
+    if (m.hp <= m.maxHp * 0.3) {
+      q.pets.push({ level: m.level, maxHp: m.maxHp, bagT: 45, x: q.x, y: q.y }); // 45 s dentro de la bolsa; luego la bolsa queda libre para otro coso
+      battle.over = { win: q, lose: m, r: { xp: 10, jd: 0, w: 0 }, captured: true }; battle.timer = 2.5;
+      battle.msg = "¡" + q.name + " atrapó un coso! Será su mascota"; sfx("save");
+    } else {
+      battle.turn = 1; doAttack(m, q);
+      if (!battle.over) battle.msg = "¡El coso rompió la bolsa! " + battle.msg;
+    }
+  }
+  function petTick(q, dt) {
+    q.pets.forEach((pt, i) => {
+      if (pt.bagT > 0) {
+        pt.bagT -= dt;
+        if (pt.bagT <= 0) { q.bags++; pt.x = q.x; pt.y = q.y; notice = { text: "Un coso de " + q.name + " salió de la bolsa y ahora lo sigue", t: 4 }; } // la bolsa queda libre
+        return;
+      }
+      pt.x += (q.x + (q.facing > 0 ? -45 - 30 * i : 85 + 30 * i) - pt.x) * Math.min(1, dt * 3);
+      pt.y += (q.y + 40 - pt.y) * Math.min(1, dt * 3);
+    });
+  }
+  function drawPet(pt) {
+    ctx.save(); ctx.translate(pt.x + 20, pt.y + 34); ctx.scale(0.55, 0.55);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)"; ctx.beginPath(); ctx.ellipse(0, 18, 17, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#2fa84f"; ctx.beginPath(); ctx.arc(0, 0, 17, Math.PI, 0); ctx.lineTo(17, 16); ctx.lineTo(-17, 16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-6, -2, 4, 0, Math.PI * 2); ctx.arc(6, -2, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.beginPath(); ctx.arc(-6, -2, 1.8, 0, Math.PI * 2); ctx.arc(6, -2, 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  function drawNpc(n) {
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)"; ctx.beginPath(); ctx.ellipse(n.x, n.y + 2, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = n.col; ctx.fillRect(n.x - 7, n.y - 20, 14, 20);
+    ctx.fillStyle = "#f1c27d"; ctx.beginPath(); ctx.arc(n.x, n.y - 26, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111"; ctx.fillRect(n.x - 3, n.y - 28, 2, 2); ctx.fillRect(n.x + 1, n.y - 28, 2, 2);
+    ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillStyle = "#fff"; ctx.fillText(n.label || "Viajero", n.x, n.y - 35);
+  }
+
+  // ---- Menú inicial ----
+  let started = false;
+  const MENU = [["1 jugador", 1, false], ["2 jugadores", 2, false], ["2 jugadores · cooperativo", 2, true], ["3 jugadores", 3, false], ["3 jugadores · cooperativo", 3, true]];
+  const SLOTS = ["1", "2", "2c", "3", "3c"]; // una partida por cada botón del menú
+  const GAME_TITLE = "The Last Guardians"; // nombre del juego
+  let stage = "menu", nameIdx = 0, nameBuf = "", coop = false; // coop: los guardianes no se pelean entre sí
+  const ALL_PLAYERS = [...players]; // los tres, para poder volver al menú
+  // R + . : vuelve al inicio (menú) sin borrar nada
+  function goMenu() {
+    if (AC && lastMusic) { lastMusic.g.gain.cancelScheduledValues(AC.currentTime); lastMusic.g.gain.setTargetAtTime(0.0001, AC.currentTime, 0.02); } // corta la nota que sonaba
+    if (battle) for (const [q, x, y] of battle.saved) { if (q === battle.a || q === battle.b) { q.x = x; q.y = y; } q.hidden = false; }
+    players.length = 0; players.push(...ALL_PLAYERS);
+    battle = null; monsters = []; npcs = []; paused = false; showMap = showInfo = showRadar = false;
+    players.forEach((q) => { q.hidden = false; });
+    for (const k of Object.keys(keys)) keys[k] = false;
+    started = false; stage = "menu";
+  }
+  // Shift + / (dos veces para confirmar): nueva partida, borra los guardados y empieza de cero
+  let newGameAsk = -1e9;
+  function newGameCombo() {
+    const t = performance.now();
+    if (t - newGameAsk > 4000) { newGameAsk = t; notice = { text: "¿Nueva partida? Pulsa Shift + / otra vez para borrar lo guardado de este modo", t: 4 }; return; }
+    newGameAsk = -1e9;
+    try { Object.keys(localStorage).filter((k) => k.startsWith("guardianes:" + slot + ":")).forEach((k) => localStorage.removeItem(k)); } catch (e) {}
+    goMenu();
+    peaceMode = false;
+    ALL_PLAYERS.forEach((q) => {
+      Object.assign(q, { level: 5, xp: 0, money: 500, weapons: 0, form: 1, kills: 0, bags: 0, pets: [], potions: 0, hypers: 0, gun: 0, horse: false, inside: null, evo: null,
+        noEvoBefore: 0, peace: false, hidden: false, x: q.sx0, y: q.sy0, facing: q.idle.x < 0 ? -1 : 1, enterCd: 0, city: undefined });
+      setStats(q); q.hp = q.maxHp; placeAtGremio(q);
+    });
+  }
+  function resetPlayer(q) { // todo desde cero (también el nombre)
+    Object.assign(q, { name: q.id, level: 5, xp: 0, money: 500, weapons: 0, form: 1, kills: 0, bags: 0, pets: [], potions: 0, hypers: 0, gun: 0, horse: false, inside: null, evo: null,
+      noEvoBefore: 0, peace: false, hidden: false, x: q.sx0, y: q.sy0, facing: q.idle.x < 0 ? -1 : 1, enterCd: 0, city: undefined });
+    setStats(q); q.hp = q.maxHp; placeAtGremio(q);
+  }
+  function chooseMode(i) {
+    const m = MENU[i]; if (!m) return;
+    slot = SLOTS[i]; players.splice(m[1]); coop = m[2];
+    monsters = []; npcs = []; battle = null;
+    players.forEach((q) => { resetPlayer(q); loadPlayer(q); }); // desde cero, salvo que este modo ya tenga partida guardada
+    try { peaceMode = localStorage.getItem("guardianes:" + slot + ":mundo") === "salvado"; } catch (e) { peaceMode = false; }
+    players.forEach((q) => { q.peace = peaceMode; });
+    stage = "names"; nameIdx = 0; nameBuf = "";
+  }
+  function finishGame() { started = true; stage = "menu"; audio(); }
+  function menuKey(e, k) {
+    if (stage === "menu") { const i = "12345".indexOf(k); if (k.length === 1 && i >= 0) chooseMode(i); return; }
+    // Elegir nombre (solo al inicio): escribe, Retroceso borra, Enter confirma
+    if (e.key === "Enter") {
+      if (nameBuf.trim()) players[nameIdx].name = nameBuf.trim();
+      nameIdx++;
+      if (nameIdx >= players.length) finishGame(); else nameBuf = "";
+    } else if (e.key === "Backspace") { nameBuf = nameBuf.slice(0, -1); e.preventDefault(); }
+    else if (e.key.length === 1 && nameBuf.length < 12) { nameBuf += e.key; if (e.key === " ") e.preventDefault(); }
+  }
+  function drawMenu() {
+    const w = canvas.width / 2;
+    ctx.save();
+    ctx.fillStyle = "#101820"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffe27a"; ctx.font = "bold 24px Georgia, serif"; ctx.fillText(GAME_TITLE, w, 34, 440);
+    if (stage === "menu") {
+      ctx.fillStyle = "#cde"; ctx.font = "12px system-ui, sans-serif"; ctx.fillText("Elige cuántos van a jugar (clic o tecla 1 a 5)", w, 64);
+      MENU.forEach(([t, n, c], i) => {
+        const y = 82 + i * 46;
+        ctx.fillStyle = c ? "#7a3fb0" : ["#e11d2e", "#2563eb", "#2fa84f"][n - 1]; ctx.fillRect(90, y, 300, 38);
+        ctx.fillStyle = "#fff"; ctx.font = "bold 16px system-ui, sans-serif"; ctx.fillText(t, w, y + 20, 280);
+      });
+      ctx.fillStyle = "#789"; ctx.font = "10px system-ui, sans-serif"; ctx.fillText("Cooperativo: los guardianes no se pelean entre sí", w, canvas.height - 26);
+      ctx.fillText("Cada botón tiene su propia partida guardada", w, canvas.height - 12);
+    } else {
+      ctx.fillStyle = "#cde"; ctx.font = "13px system-ui, sans-serif";
+      ctx.fillText("Nombre del guardián " + players[nameIdx].id + " (" + (nameIdx + 1) + " de " + players.length + ")", w, 92);
+      ctx.fillText("Escribe un nombre y pulsa Enter, o solo Enter para dejar el de siempre.", w, 114);
+      ctx.fillStyle = "#fff"; ctx.fillRect(110, 140, 260, 44);
+      ctx.fillStyle = "#111"; ctx.font = "bold 22px system-ui, sans-serif";
+      if (nameBuf) ctx.fillText(nameBuf + (Math.floor(performance.now() / 500) % 2 ? "|" : ""), w, 163);
+      else { ctx.fillStyle = "#999"; ctx.fillText(players[nameIdx].name, w, 163); } // el nombre actual, en gris
+    }
+    ctx.restore();
+  }
+  canvas.addEventListener("click", (e) => {
+    if (started || stage !== "menu") return;
+    const r = canvas.getBoundingClientRect(), x = (e.clientX - r.left) * canvas.width / r.width, y = (e.clientY - r.top) * canvas.height / r.height;
+    MENU.forEach((_, i) => { const by = 82 + i * 46; if (x >= 90 && x <= 390 && y >= by && y <= by + 38) chooseMode(i); });
+  });
+
+  let battle = null, cooldown = 0, monsters = [], spawnT = 8;
+  const isNight = () => { const h = new Date().getHours(); return h >= 17 || h < 6; };
+  // Nivel de los cosos: 7; si los tres llegan a 10 → 13; a 15 → 19; etc.
+  const monsterLevel = () => 7 + 6 * Math.floor((Math.min(...players.map((q) => q.level)) - 5) / 5);
+
+  function spawnMonster() {
+    if (peaceMode) return;
+    const out = players.filter((z) => !inVilla(z.x + 20, z.y + 24) && (!z.inside || monsterLevel() >= 17));
+    if (!out.length) return;
+    const lv = monsterLevel(), q = out[Math.floor(Math.random() * out.length)], ang = Math.random() * Math.PI * 2;
+    const m = { isMonster: true, name: "Coso", level: lv, hidden: false,
+      x: Math.max(20, Math.min(WORLD.w - 20, q.x + Math.cos(ang) * 280)), y: Math.max(20, Math.min(WORLD.h - 20, q.y + Math.sin(ang) * 280)) };
+    if (inVilla(m.x, m.y) || wet(m.x, m.y)) return; // no aparecen en Villa Aurora ni en el agua
+    m.maxHp = 80 + lv * 4; m.hp = m.maxHp;
+    monsters.push(m);
+  }
+  function updateMonsters(dt) {
+    spawnT -= dt;
+    if (spawnT <= 0) { // de noche aparecen más y más seguido
+      const night = isNight();
+      if (monsters.length < (night ? 3 : 1) && (night || Math.random() < 0.6)) spawnMonster();
+      spawnT = night ? 6 + Math.random() * 6 : 20 + Math.random() * 20;
+    }
+    for (const m of monsters) {
+      let best = null, bd = 1e9;
+      for (const q of players) {
+        if ((q.inside && m.level < 17) || inVilla(q.x + 20, q.y + 24)) continue; // solo los cosos de nivel 17 o más van por quien está dentro de un edificio
+        const d = Math.hypot(q.x + q.size / 2 - m.x, q.y + 24 - m.y);
+        if (d < bd) { bd = d; best = q; }
+      }
+      if (best) {
+        let tx = best.x + best.size / 2, ty = best.y + 24;
+        if (m.way) { tx = m.way[0]; ty = m.way[1]; if (Math.hypot(tx - m.x, ty - m.y) < 25) m.way = null; }
+        const dd = Math.hypot(tx - m.x, ty - m.y) || 1, sp = (m.level >= 20 ? 70 : 55) * dt;
+        const nx = m.x + (tx - m.x) / dd * sp, ny = m.y + (ty - m.y) / dd * sp;
+        const ok = (x, y) => !wet(x, y) && !inVilla(x, y); // el agua y Villa Aurora los frenan
+        if (ok(nx, ny)) { m.x = nx; m.y = ny; }
+        else {
+          if (wet(nx, ny) && !m.way) { // el río los frena: descubren el puente más cercano
+            let bb = null, bdist = 1e9;
+            for (const r of BRIDGES) {
+              const bx = r[0] + r[2] / 2, by = r[1] + r[3] / 2, d3 = Math.hypot(bx - m.x, by - m.y) + Math.hypot(bx - tx, by - ty);
+              if (d3 < bdist) { bdist = d3; bb = [bx, by]; }
+            }
+            m.way = bb;
+          }
+          if (ok(nx, m.y)) m.x = nx; else if (ok(m.x, ny)) m.y = ny;
+        }
+      }
+    }
+  }
+  function findBattle() {
+    for (let i = 0; i < players.length; i++)
+      for (let j = i + 1; j < players.length; j++)
+        if (!coop && !players[i].inside && !players[j].inside && !players[i].peace && !players[j].peace && swordsTouch(players[i], players[j])) return [players[i], players[j]];
+    for (const m of monsters)
+      for (const q of players)
+        if ((!q.inside || m.level >= 17) && !inVilla(q.x + 20, q.y + 24) && (ptSeg(m.x, m.y, swordSeg(q)) < 20 || Math.hypot(q.x + q.size / 2 - m.x, q.y + 24 - m.y) < 30)) return [q, m];
+    return null;
+  }
+  function tickEvolution(q, dt) {
+    const target = q.level >= 32 ? 3 : q.level >= 20 ? 2 : 1;
+    if (!q.evo && target > q.form && q.level >= q.noEvoBefore) q.evo = { to: target, t: 4 };
+    if (q.evo && (q.evo.t -= dt) <= 0) { q.form = q.evo.to; q.evo = null; }
+  }
+
+  function startBattle(a, b) {
+    const all = [...players, ...monsters];
+    [a, b].forEach((q) => { // un coso de nivel 17+ puede sacar a alguien de un edificio
+      if (q.horse) { q.horse = false; notice = { text: "¡El coso espantó al caballo de " + q.name + "! Volvió al establo", t: 4 }; }
+      if (q.inside) { notice = { text: "¡Un coso entró a " + q.inside.name + "!", t: 3 }; q.inside = null; }
+    });
+    battle = { a, b, over: null, timer: 0, wait: 0.9, idle: 6, saved: all.map((q) => [q, q.x, q.y]) };
+    all.forEach((q) => { if (q !== a && q !== b) q.hidden = true; }); // en una pelea no se divide la pantalla: los demás no se ven
+    const ex = (e) => e.isMonster ? e.x : e.x + 20, ey = (e) => e.isMonster ? e.y : e.y + 24;
+    const cx = Math.max(240, Math.min(WORLD.w - 240, (ex(a) + ex(b)) / 2)), cy = Math.max(190, Math.min(WORLD.h - 190, (ey(a) + ey(b)) / 2));
+    a.x = cx - 180; a.y = cy - 70; a.facing = 1; a.look = { x: 0.8, y: 0.6 };
+    if (b.isMonster) { b.x = cx + 160; b.y = cy + 60; }
+    else { b.x = cx + 140; b.y = cy + 20; b.facing = -1; b.look = { x: -0.8, y: -0.6 }; }
+    ;[a.x, a.y] = freePos(a.x, a.y); // la arena tampoco queda en el agua
+    if (!b.isMonster) [b.x, b.y] = freePos(b.x, b.y);
+    // Ataca primero el de mayor nivel; si empatan, al azar
+    // Contra un coso siempre empieza el guardián. Entre guardianes: ataca primero el de mayor nivel; si empatan, al azar
+    battle.turn = b.isMonster ? 0 : a.level > b.level ? 0 : a.level < b.level ? 1 : (Math.random() < 0.5 ? 0 : 1);
+    const first = battle.turn ? b : a;
+    battle.msg = "¡Batalla! Ataca primero " + first.name + (first.isMonster ? "" : " (tecla " + first.atkKey + ")");
+  }
+  function doAttack(att, def) {
+    let raw = 6 + att.level * 2 + Math.floor(Math.random() * 7);
+    if (!att.isMonster && def.isMonster && att.gun) raw *= [1, 1.3, 1.7, 2.2][att.gun]; // el arma electrónica del Taller
+    const defense = 1 + (def.level - 5) * 0.05 + ((def.form || 1) - 1) * 0.4; // más nivel o más forma = la barra baja más lento
+    const dmg = Math.max(1, Math.round(raw / defense));
+    sfx(att.isMonster ? "monster" : def.isMonster ? "cut" : "clash");
+    def.hp = Math.max(0, def.hp - dmg);
+    if (!att.isMonster) gainXp(att, 10);
+    if (def.hp === 0) {
+      // Premio: contra un coso, más nivel del coso = más premio; contra un guardián, todo lo que tenga
+      const r = def.isMonster ? { xp: 30 + def.level * 4, jd: 40 + def.level * 10, w: Math.random() < 0.3 ? 1 : 0 }
+        : att.isMonster ? { xp: 0, jd: 0, w: 0 } : { xp: 50, jd: def.money, w: def.weapons };
+      battle.over = { win: att, lose: def, r }; battle.timer = 3.2;
+      battle.msg = att.name + " gana: " + (att.isMonster ? "¡el coso se ríe!" : "+" + r.xp + " XP, +" + r.jd + " JD" + (r.w ? ", +" + r.w + " arma" : ""));
+    } else {
+      battle.turn ^= 1; battle.wait = 0.9; battle.idle = 6;
+      battle.msg = att.name + " golpea a " + def.name + " (-" + dmg + ")." + (def.isMonster ? "" : " Turno de " + def.name + " (tecla " + def.atkKey + ")");
+    }
+  }
+  function onKey(k) {
+    if (k === "b") { // B: cierra el mapa, la ayuda y el radar, y también sale de la pausa
+      showMap = false; showInfo = false; showRadar = false; paused = false; idleT = 0;
+      return;
+    }
+    if (paused) return;
+    if (k === "+") { showInfo = !showInfo; return; }
+    if (k === "r") { showRadar = !showRadar; return; } // R: radar de cosos
+    if (k.length === 1 && "123".includes(k)) { buyAt("123".indexOf(k)); return; } // comprar en la tienda
+    const pq = players.find((q) => q.potKey === k || q.hypKey === k);
+    if (pq) { usePotion(pq, pq.hypKey === k); return; }
+    const si = { "/": 0, q: 1, u: 2 }[k];
+    if (si !== undefined) { if (battle) notice = { text: "No se puede guardar en batalla", t: 2 }; else if (players[si]) savePlayer(players[si]); return; }
+    const ri = { ".": 0, z: 1, "0": 2 }[k];
+    if (ri !== undefined) { if (battle) notice = { text: "No se puede reiniciar en batalla", t: 2 }; else if (players[ri]) restorePlayer(players[ri]); return; }
+    for (const q of players) if (q.evo && k === q.cancelKey) { q.evo = null; q.noEvoBefore = q.level + 1; } // cancelar evolución
+    if (!battle || battle.over) return;
+    const att = battle.turn ? battle.b : battle.a, def = battle.turn ? battle.a : battle.b;
+    if (!att.isMonster && def.isMonster && k === att.capKey) { tryCapture(att, def); return; }
+    if (att.isMonster || k !== att.atkKey) return;
+    doAttack(att, def);
+  }
+  function endBattle() {
+    const { win, lose, r } = battle.over;
+    if (!win.isMonster) { gainXp(win, r.xp); win.money += r.jd; win.weapons += r.w; }
+    if (lose.isMonster) {
+      if (!win.isMonster && !battle.over.captured) win.kills++; // atrapar no cuenta como vencer
+      monsters = monsters.filter((m) => m !== lose);
+    } else {
+      if (win.isMonster) monsters = monsters.filter((m) => m !== win); // el coso que mata a alguien desaparece
+      lose.money = 0; lose.weapons = 0; lose.level = 5; lose.xp = 0; // pierde todo y vuelve al nivel 5
+      lose.form = 1; lose.evo = null; lose.noEvoBefore = 0; lose.kills = 0; lose.bags = 0; lose.pets = []; lose.potions = 0; lose.hypers = 0; lose.gun = 0; lose.horse = false; setStats(lose); // perder borra su cuenta de cosos
+    }
+    for (const [q, x, y] of battle.saved) { if (q === battle.a || q === battle.b) { q.x = x; q.y = y; } q.hidden = false; q.hp = q.maxHp; }
+    if (!lose.isMonster) respawnAtSave(lose); // reaparece donde guardó (o en el Gremio si nunca guardó)
+    battle = null; cooldown = 1.5;
+    checkVictory();
+  }
+
+  function drawWorld(camX, camY, vw) {
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.07)"; ctx.lineWidth = 1;
+    for (let x = Math.floor(camX / 80) * 80; x < camX + vw; x += 80) { ctx.beginPath(); ctx.moveTo(x, camY); ctx.lineTo(x, camY + canvas.height); ctx.stroke(); }
+    for (let y = Math.floor(camY / 80) * 80; y < camY + canvas.height; y += 80) { ctx.beginPath(); ctx.moveTo(camX, y); ctx.lineTo(camX + vw, y); ctx.stroke(); }
+    CITIES.forEach((c) => {
+      ctx.fillStyle = "#bdb59f"; ctx.fillRect(c.x, c.y, c.w, c.h);
+    });
+    ctx.fillStyle = "rgba(255, 255, 255, 0.06)"; // caminitos casi invisibles entre los edificios
+    CITIES.forEach((c) => {
+      for (let k = 0; k < 4; k++) ctx.fillRect(c.x + 40 + k * (c.w - 144) / 3 + 24, c.y + 20, 16, c.h - 40);
+      for (let r = 0; r < 3; r++) ctx.fillRect(c.x + 20, c.y + 50 + r * (c.h - 160) / 2 + 60, c.w - 40, 16);
+    });
+    BUILDINGS.forEach((b) => {
+      ctx.fillStyle = b.special ? "#d9935a" : "#c9794a"; ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = "#7a2e2e"; ctx.beginPath(); ctx.moveTo(b.x - 6, b.y); ctx.lineTo(b.x + b.w / 2, b.y - 22); ctx.lineTo(b.x + b.w + 6, b.y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#3a2210"; ctx.fillRect(b.x + b.w / 2 - 8, b.y + b.h - 20, 16, 20); // puerta
+      if (b.name) { ctx.fillStyle = "#111"; ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(b.name, b.x + b.w / 2, b.y - 24); }
+      if (npcs.some((n) => n.b === b)) { // un signo "!" avisa que hay un viajero adentro
+        ctx.fillStyle = "#ffe27a"; ctx.beginPath(); ctx.arc(b.x + b.w / 2, b.y - 40, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#111"; ctx.font = "bold 13px system-ui, sans-serif"; ctx.textBaseline = "middle"; ctx.fillText("!", b.x + b.w / 2, b.y - 40);
+      }
+    });
+    ctx.fillStyle = "#3b82c4"; WATER.forEach((r) => ctx.fillRect(r[0], r[1], r[2], r[3]));
+    ctx.fillStyle = "#9a6b3a"; ctx.strokeStyle = "#6b4423";
+    BRIDGES.forEach((r) => { ctx.fillRect(r[0], r[1], r[2], r[3]); ctx.strokeRect(r[0], r[1], r[2], r[3]); });
+    ISLANDS.forEach((r) => { ctx.fillStyle = "#e3d49a"; ctx.fillRect(r[0], r[1], r[2], r[3]); });
+    BUILDINGS.filter((b) => b.island).forEach((b) => { // la tienda de la isla se dibuja encima del agua
+      ctx.fillStyle = "#d9935a"; ctx.fillRect(b.x, b.y, b.w, b.h);
+      ctx.fillStyle = "#7a2e2e"; ctx.beginPath(); ctx.moveTo(b.x - 6, b.y); ctx.lineTo(b.x + b.w / 2, b.y - 22); ctx.lineTo(b.x + b.w + 6, b.y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#3a2210"; ctx.fillRect(b.x + b.w / 2 - 8, b.y + b.h - 20, 16, 20);
+      ctx.fillStyle = "#111"; ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.fillText(b.name, b.x + b.w / 2, b.y - 24);
+    });
+    ctx.strokeStyle = "#000"; ctx.lineWidth = 3; ctx.strokeRect(0, 0, WORLD.w, WORLD.h);
+  }
+  // Una sola pantalla si están cerca; si se alejan, se divide (2 o 3 pantallas)
+  function drawViews(night) {
+    const vis = players.filter((q) => !q.hidden);
+    const groups = battle ? [[battle.a, battle.b]] : []; // en batalla: una vista para la pelea y las normales para los demás
+    for (const q of vis) {
+      if (battle && (q === battle.a || q === battle.b)) continue;
+      // Quien está dentro de un edificio siempre tiene su propia pantalla; los de afuera se agrupan si están cerca
+      const g = groups.find((g, gi) => !(battle && gi === 0) && (q.inside ? g[0].inside === q.inside : !g[0].inside && Math.abs(g[0].x - q.x) < 260 && Math.abs(g[0].y - q.y) < 190)); // en el mismo edificio comparten sala
+      if (g) g.push(q); else groups.push([q]);
+    }
+    const n = groups.length, vw = canvas.width / n, d = new Date(), hr = d.getHours() + d.getMinutes() / 60;
+    groups.forEach((g, i) => {
+      const cx = g.reduce((t, e) => t + (e.isMonster ? e.x : e.x + 20), 0) / g.length;
+      const cy = g.reduce((t, e) => t + (e.isMonster ? e.y : e.y + 24), 0) / g.length;
+      const camX = Math.max(0, Math.min(WORLD.w - vw, cx - vw / 2)), camY = Math.max(0, Math.min(WORLD.h - canvas.height, cy - canvas.height / 2));
+      ctx.save();
+      ctx.beginPath(); ctx.rect(i * vw, 0, vw, canvas.height); ctx.clip();
+      ctx.translate(i * vw - camX, -camY);
+      drawWorld(camX, camY, vw);
+      if (night) { ctx.fillStyle = "rgba(4, 8, 30, 0.62)"; ctx.fillRect(camX, camY, vw, canvas.height); }
+      if (hr >= 6 && hr < 11.5) { ctx.fillStyle = "rgba(255, 255, 225, 0.22)"; ctx.fillRect(camX, camY, vw, canvas.height); }
+      [...vis].filter((q) => !q.inside).sort((a, b) => a.y - b.y).forEach((q) => {
+        ctx.save();
+        if (q.evo) ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(performance.now() / 120));
+        drawCharacter(q);
+        ctx.restore();
+      });
+      monsters.filter((m) => !m.hidden).forEach(drawMonster);
+      players.forEach((q) => { if (!q.inside && !q.hidden) q.pets.filter((t) => t.bagT <= 0).forEach(drawPet); });
+      ctx.restore();
+      const insAll = g.filter((e) => e.inside);
+      if (insAll.length) drawInterior(insAll, i * vw, vw);
+      if (showRadar) { // un radar en cada pantalla; dentro de un edificio mide desde su puerta
+        const bi = insAll[0] && insAll[0].inside;
+        drawRadar(bi ? bi.x + bi.w / 2 : cx, bi ? bi.y + bi.h : cy, i * vw, vw);
+      }
+      if (i) { ctx.fillStyle = "#fff"; ctx.fillRect(i * vw - 1, 0, 2, canvas.height); }
+    });
+  }
+  function drawFurniture(b) { // cosas dentro de cada edificio (en coordenadas de la sala)
+    const t = performance.now();
+    const bed = (x, y, col) => { ctx.fillStyle = "#e8e0d0"; ctx.fillRect(x, y, 44, 24); ctx.fillStyle = col; ctx.fillRect(x + 12, y, 32, 24); ctx.fillStyle = "#fff"; ctx.fillRect(x + 2, y + 4, 10, 16); };
+    const table = (x, y) => { ctx.fillStyle = "#8a5a2b"; ctx.fillRect(x, y, 40, 22); ctx.fillStyle = "#c98a45"; ctx.fillRect(x + 2, y + 2, 36, 12); };
+    if (SHOPS[b.name]) { ctx.fillStyle = "#5a3a1a"; ctx.fillRect(ROOM.w / 2 - 50, 14, 100, 16); ctx.fillStyle = "#c98a45"; ctx.fillRect(ROOM.w / 2 - 50, 14, 100, 6); } // mostrador
+    if (b.name === "Museo de Cosos") { // cosos disecados; el del medio parpadea de vez en cuando
+      [40, 150, 260].forEach((x, i) => {
+        ctx.fillStyle = "#777"; ctx.fillRect(x - 20, 60, 40, 18);
+        ctx.save(); ctx.translate(x, 46); ctx.scale(0.8, 0.8);
+        ctx.fillStyle = "#5b2a86"; ctx.beginPath(); ctx.arc(0, 0, 17, Math.PI, 0); ctx.lineTo(17, 16); ctx.lineTo(-17, 16); ctx.closePath(); ctx.fill();
+        if (i === 1 && t % 4000 < 300) { ctx.strokeStyle = "#111"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-10, -2); ctx.lineTo(-2, -2); ctx.moveTo(2, -2); ctx.lineTo(10, -2); ctx.stroke(); }
+        else { ctx.fillStyle = "#ffd23f"; ctx.beginPath(); ctx.arc(-6, -2, 4, 0, Math.PI * 2); ctx.arc(6, -2, 4, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      });
+    } else if (b.name === "Taller") { // el horno con una pistolita en el fuego
+      ctx.fillStyle = "#4a3a33"; ctx.fillRect(14, 8, 76, 56); ctx.fillStyle = "#1a0f0a"; ctx.fillRect(26, 26, 52, 34);
+      const f = 6 * Math.sin(t / 120);
+      ctx.fillStyle = "#ff8a1f"; ctx.beginPath(); ctx.moveTo(32, 60); ctx.lineTo(42, 38 + f); ctx.lineTo(52, 60); ctx.moveTo(48, 60); ctx.lineTo(60, 34 - f); ctx.lineTo(72, 60); ctx.fill();
+      ctx.fillStyle = "#9aa4ad"; ctx.fillRect(38, 46, 24, 6); ctx.fillRect(38, 46, 7, 14); ctx.fillStyle = "#ffd23f"; ctx.fillRect(62, 47, 4, 4);
+      ctx.fillStyle = "#444"; ctx.fillRect(ROOM.w - 80, 110, 44, 16); ctx.fillRect(ROOM.w - 70, 126, 24, 10);
+    } else if (b.name === "Casa del Pescador") { // el pescador con su caña
+      drawNpc({ x: ROOM.w - 60, y: 110, col: "#2d6a9f", label: "Pescador" });
+      ctx.strokeStyle = "#8a5a2b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(ROOM.w - 54, 92); ctx.lineTo(ROOM.w - 22, 50); ctx.stroke();
+      ctx.strokeStyle = "#ddd"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(ROOM.w - 22, 50); ctx.lineTo(ROOM.w - 22, 80); ctx.stroke();
+      ctx.fillStyle = "#6a9fd0"; ctx.beginPath(); ctx.ellipse(ROOM.w - 22, 84, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+      table(20, 14);
+    } else if (b.name === "Posada del Alba") { bed(16, 12, "#2563eb"); bed(100, 12, "#e11d2e"); bed(184, 12, "#8a8f98"); table(250, 14);
+    } else { // casa normal: cama, mesa y alfombra
+      bed(16, 12, "#c04080"); table(ROOM.w - 66, 14);
+      ctx.fillStyle = "rgba(120, 40, 40, 0.35)"; ctx.beginPath(); ctx.ellipse(ROOM.w / 2, ROOM.h / 2 + 14, 70, 26, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function drawInterior(ps, vx, vw) {
+    const p = ps[0], b = p.inside, cx = vx + vw / 2, sc = Math.min(1, (vw - 12) / ROOM.w);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(vx, 0, vw, canvas.height); ctx.clip();
+    ctx.fillStyle = "#3a2a1c"; ctx.fillRect(vx, 0, vw, canvas.height);
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    const text = (t, size, y, col) => { // escribe con saltos de línea
+      ctx.font = "bold " + size + "px system-ui, sans-serif"; ctx.fillStyle = col;
+      let line = "";
+      for (const w of t.split(" ")) {
+        const test = line ? line + " " + w : w;
+        if (ctx.measureText(test).width > vw - 16 && line) { ctx.fillText(line, cx, y); y += size + 3; line = w; } else line = test;
+      }
+      ctx.fillText(line, cx, y);
+    };
+    text(b.name, vw < 300 ? 14 : 20, 8, "#ffe27a");
+    const shop = SHOPS[b.name];
+    if (shop && vw >= 300) {
+      const sq = shopper(b);
+      text("Atiende a " + (sq ? sq.name + " (" + sq.money + " JD)" : "nadie: acércate al mostrador") + " · pulsa 1, 2 o 3", 11, 28, "#ffe27a");
+      shop.forEach((it, i) => text((i + 1) + ") " + it[0] + (it[1] ? " — " + it[1] + " JD" : ""), 11, 43 + i * 13, "#fff"));
+    } else if (vw >= 300) text(b.name === "Banco Dorado" ? "Tu dinero: " + p.money + " JD" : b.desc, 13, 38, "#fff");
+    ctx.translate(cx - ROOM.w * sc / 2, 84); ctx.scale(sc, sc);
+    ctx.fillStyle = "#6b4a2b"; ctx.fillRect(0, 0, ROOM.w, ROOM.h); // suelo de madera
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.25)"; ctx.lineWidth = 1;
+    for (let x = 30; x < ROOM.w; x += 30) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ROOM.h); ctx.stroke(); }
+    ctx.fillStyle = "#3a2210"; ctx.fillRect(ROOM.w / 2 - 22, ROOM.h - 8, 44, 8); // puerta de salida
+    drawFurniture(b);
+    npcs.filter((n) => n.b === b).forEach((n) => drawNpc({ x: n.ix, y: n.iy + 40, col: n.col })); // viajeros de esta sala
+    [...ps].sort((m, n) => m.iy - n.iy).forEach((q) => { const ox = q.x, oy = q.y; q.x = q.ix; q.y = q.iy; drawCharacter(q); q.x = ox; q.y = oy; }); // en coordenadas de la sala
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath(); ctx.rect(vx, 0, vw, canvas.height); ctx.clip();
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    text("Sal por la puerta de abajo", 12, canvas.height - 26, "#fff");
+    ctx.restore();
+  }
+  // Radar: muestra los cosos que hay alrededor de la pantalla (los lejanos se marcan en el borde)
+  function drawRadar(wx, wy, vx, vw) {
+    const R = 500, r = Math.min(46, vw / 2 - 10), rx = vx + vw - r - 8, ry = 62 + r;
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 25, 0, 0.65)"; ctx.strokeStyle = "#5dff7a"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(rx, ry, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath(); ctx.moveTo(rx - r, ry); ctx.lineTo(rx + r, ry); ctx.moveTo(rx, ry - r); ctx.lineTo(rx, ry + r); ctx.stroke();
+    ctx.beginPath(); ctx.arc(rx, ry, r / 2, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    let near = 0;
+    for (const m of monsters) {
+      const dx = m.x - wx, dy = m.y - wy, d = Math.hypot(dx, dy) || 1, far = d > R;
+      if (!far) near++;
+      const k = far ? r / d : r / R;
+      ctx.fillStyle = far ? "rgba(255, 90, 90, 0.6)" : "#ff4a4a";
+      ctx.beginPath(); ctx.arc(rx + dx * k, ry + dy * k, far ? 2 : 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(rx, ry, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#9dffb0"; ctx.font = "bold 10px system-ui, sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    ctx.fillText("Cerca: " + near + " · Total: " + monsters.length, rx, ry + r + 3);
+    ctx.restore();
+  }
+  function posadaStay(q) {
+    const otro = dreamFx > 0 && dreamer && dreamer !== q && dreamer.inside === q.inside; // si dos están dentro, solo uno puede soñar
+    if (!otro && Math.random() < 0.15) { // 15%: sueña con la llegada de los cosos y despierta de golpe
+      dreamer = q; dreamFx = 5;
+      notice = { text: q.name + " soñó con el día en que los cosos llegaron al mundo...", t: 5 };
+    } else { // 85%: descansa, se cura y se guarda la partida
+      q.hp = q.maxHp; savePlayer(q);
+      notice = { text: q.name + " descansó: vida recuperada y partida guardada", t: 4 };
+    }
+  }
+  function drawDream() {
+    if (dreamFx <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = dreamFx > 1 ? 0.88 : dreamFx * 0.88; // al final se aclara de golpe
+    ctx.fillStyle = dreamFx > 1 ? "#05030c" : "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (dreamFx > 1) {
+      ctx.globalAlpha = 1; ctx.fillStyle = "#c9b8ff"; ctx.font = "italic 16px Georgia, serif"; ctx.textAlign = "center";
+      ctx.fillText("Sueñas con el día en que los cosos llegaron al mundo...", canvas.width / 2, canvas.height / 2 - 8);
+      ctx.fillText("¡y despiertas de golpe!", canvas.width / 2, canvas.height / 2 + 18);
+    }
+    ctx.restore();
+  }
+  function drawHelp() {
+    const lines = [
+      ["Controles", 15, "#ffe27a"],
+      ["Rojo: flechas · atacar Enter · guardar / · volver al guardado . · cancelar evolución Esc", 11, "#fff"],
+      ["Azul: W A S D · atacar E · guardar Q · volver al guardado Z · cancelar evolución C", 11, "#fff"],
+      ["Gris: I J K L · atacar P · guardar U · volver al guardado 0 · cancelar evolución M", 11, "#fff"],
+      ["Alt: pausa · Shift: mapa · R: radar de cosos · +: mostrar u ocultar esta ayuda", 11, "#fff"],
+      ["B: cerrar mapa, ayuda y radar, o salir de la pausa · R + . : volver al inicio", 11, "#fff"],
+      ["Shift + / (dos veces): nueva partida, borra todo lo guardado", 11, "#fff"],
+      ["Bolsa anti cosos: debilita al coso (menos del 30% de vida) y pulsa , rojo · X azul · O gris", 11, "#cde"],
+      ["Tu mascota pelea por ti si tardas en atacar. Si el coso rompe la bolsa, la pierdes.", 11, "#cde"],
+      ["Poción: V rojo · G azul · T gris. Hiperpoción: N · H · Y. Tiendas: ve al mostrador y pulsa 1, 2 o 3.", 11, "#cde"],
+      ["Si dos espadas se tocan (o un coso te alcanza) hay batalla por turnos.", 11, "#cde"],
+      ["Entra por la puerta; dentro camina y sal por abajo. Solo los cosos de nivel 17+ entran.", 11, "#cde"],
+      ["Para salvar el mundo, cada guardián debe vencer 30 cosos sin perder.", 11, "#cde"]
+    ];
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)"; ctx.fillRect(14, 36, canvas.width - 28, 306);
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    let y = 46;
+    for (const [t, size, col] of lines) {
+      ctx.font = (size > 12 ? "bold " : "") + size + "px system-ui, sans-serif"; ctx.fillStyle = col;
+      ctx.fillText(t, canvas.width / 2, y, canvas.width - 44);
+      y += size + 11;
+    }
+    ctx.restore();
+  }
+  function drawMap() {
+    const k = canvas.width / WORLD.w;
+    ctx.save();
+    ctx.fillStyle = "#4a8f4a"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#3b82c4"; WATER.forEach((r) => ctx.fillRect(r[0] * k, r[1] * k, r[2] * k, r[3] * k));
+    ctx.fillStyle = "#9a6b3a"; BRIDGES.forEach((r) => ctx.fillRect(r[0] * k, r[1] * k, r[2] * k, r[3] * k));
+    ctx.fillStyle = "#e3d49a"; ISLANDS.forEach((r) => ctx.fillRect(r[0] * k, r[1] * k, r[2] * k, r[3] * k));
+    ctx.textAlign = "center"; ctx.font = "bold 11px system-ui, sans-serif";
+    CITIES.forEach((c) => {
+      ctx.fillStyle = "#d8cfb8"; ctx.fillRect(c.x * k, c.y * k, c.w * k, c.h * k);
+      ctx.fillStyle = "#000"; ctx.fillText(c.name, (c.x + c.w / 2) * k, (c.y + c.h) * k + 3);
+    });
+    const dot = (x, y, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x * k, y * k, 5, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke(); };
+    monsters.forEach((m) => dot(m.x, m.y, "#5b2a86"));
+    players.forEach((q) => dot(q.x + 20, q.y + 24, q.color));
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(0, 0, canvas.width, 20);
+    ctx.fillStyle = "#fff"; ctx.fillText("Mapa del mundo · Shift o B para cerrar", canvas.width / 2, 5);
+    ctx.restore();
+  }
+  function drawBanner() {
+    if (banner.t <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, banner.t);
+    ctx.font = "bold 28px Georgia, serif"; ctx.textAlign = "center"; ctx.textBaseline = "top";
+    const w = ctx.measureText(banner.text).width + 40;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; ctx.fillRect(canvas.width / 2 - w / 2, 124, w, 44);
+    ctx.fillStyle = "#ffe27a"; ctx.fillText(banner.text, canvas.width / 2, 131);
+    ctx.restore();
+  }
+
+  function drawMonster(m) {
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    if (m.level >= 20) ctx.scale(1.7, 1.7); // los de nivel 20+ son más grandes
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+    ctx.beginPath(); ctx.ellipse(0, 18, 17, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = m.level >= 20 ? "#8a1c1c" : "#5b2a86";
+    ctx.beginPath(); ctx.arc(0, 0, 17, Math.PI, 0); ctx.lineTo(17, 16); ctx.lineTo(-17, 16); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#ffd23f";
+    ctx.beginPath(); ctx.arc(-6, -2, 4, 0, Math.PI * 2); ctx.arc(6, -2, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#111";
+    ctx.beginPath(); ctx.arc(-6, -2, 1.8, 0, Math.PI * 2); ctx.arc(6, -2, 1.8, 0, Math.PI * 2); ctx.fill();
+    if (m.level >= 20) { // distintos: cuernos y un tercer ojo
+      ctx.fillStyle = "#e8d9a8"; ctx.beginPath(); ctx.moveTo(-14, -10); ctx.lineTo(-20, -26); ctx.lineTo(-6, -15); ctx.moveTo(14, -10); ctx.lineTo(20, -26); ctx.lineTo(6, -15); ctx.fill();
+      ctx.fillStyle = "#ff4a4a"; ctx.beginPath(); ctx.arc(0, -10, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    const up = m.level >= 20 ? 62 : 38;
+    drawHealthBar(m.x, m.y - up, m.hp / m.maxHp);
+    ctx.save();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 10px system-ui, sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+    ctx.fillText("Coso Nv " + m.level, m.x, m.y - up - 3);
+    ctx.restore();
+  }
+  // El reloj lee siempre la hora real del dispositivo, así que sigue aunque el juego esté en pausa (Alt) y no se descuadra
+  function drawClock() {
+    ctx.save();
+    ctx.textBaseline = "top";
+    // Reloj en tiempo real
+    const d = new Date(), am = d.getHours() < 12;
+    const h12 = d.getHours() % 12 || 12, mm = String(d.getMinutes()).padStart(2, "0");
+    ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillRect(canvas.width - 124, 6, 118, 18);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 12px system-ui, sans-serif"; ctx.textAlign = "right";
+    ctx.fillText((am ? "🌅 " : "🌇 ") + h12 + ":" + mm + (am ? " a. m." : " p. m.") + (isNight() ? " 🌙" : ""), canvas.width - 10, 9);
+    ctx.restore();
+  }
+  function drawHud() {
+    ctx.save();
+    ctx.font = "10px system-ui, sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "top";
+    // El panel de nivel, XP, dinero y armas solo aparece en batalla (de quienes pelean)
+    (battle ? [battle.a, battle.b].filter((z) => !z.isMonster) : []).forEach((q, i) => {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
+      ctx.fillRect(6, 30 + i * 24, 400, 21);
+      ctx.fillStyle = "#fff";
+      ctx.fillText(q.name + "  Nv " + q.level + " F" + q.form + "  XP " + q.xp + "/" + xpNeeded(q.level) + "  " + q.money + " JD  Arm " + q.weapons + "  Bol " + q.bags + "  Pot " + q.potions + "/" + q.hypers + "  Cosos " + q.kills + "/" + WIN_KILLS, 11, 34 + i * 24);
+    });
+    drawClock();
+    if (notice.t > 0) {
+      ctx.font = "bold 13px system-ui, sans-serif"; ctx.textAlign = "center";
+      const w = ctx.measureText(notice.text).width + 20;
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; ctx.fillRect(canvas.width / 2 - w / 2, 86, w, 22);
+      ctx.fillStyle = "#ffe27a"; ctx.fillText(notice.text, canvas.width / 2, 90);
+    }
+    if (paused) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.5)"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 28px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("PAUSA", canvas.width / 2, canvas.height / 2 - 16);
+      ctx.font = "13px system-ui, sans-serif"; ctx.fillText("Pulsa Alt o B para seguir", canvas.width / 2, canvas.height / 2 + 18);
+      drawClock();
+    }
+    // Mensaje inferior: batalla o evolución
+    let msg = battle ? battle.msg : "";
+    if (!battle) {
+      const q = players.find((z) => z.evo);
+      if (q) msg = "¡" + q.name + " evoluciona a forma " + q.evo.to + "! Cancelar: " + (q.cancelKey === "Escape" ? "Esc" : q.cancelKey.toUpperCase());
+    }
+    if (msg) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+      ctx.fillRect(0, canvas.height - 28, canvas.width, 28);
+      ctx.fillStyle = "#fff"; ctx.font = "bold 12px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(msg, canvas.width / 2, canvas.height - 20);
+    }
+    ctx.restore();
+  }
+
+  const keys = {};
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (!started) { menuKey(e, k); return; }
+    // Shift + tecla "/" (por su posición física, así no choca con guardar en teclados donde "/" lleva Shift)
+    if (e.shiftKey && (e.code === "Slash" || e.code === "NumpadDivide")) { e.preventDefault(); shiftUsed = true; if (!e.repeat) newGameCombo(); return; }
+    // R + . : volver al inicio (mantén R y pulsa .)
+    if (!e.repeat && ((k === "." && keys.r) || (k === "r" && keys["."]))) { goMenu(); return; }
+    if (e.key === "Shift") { if (!e.repeat) { shiftDown = true; shiftUsed = false; } return; } // Shift solo (sin otra tecla): mapa
+    if (e.key === "Alt") { e.preventDefault(); if (!e.repeat) paused = !paused; idleT = 0; return; } // Alt: pausa / seguir
+    audio();
+    if (shiftDown) shiftUsed = true;
+    keys[k] = true;
+    if (e.key.startsWith("Arrow") || e.key === "Enter" || e.key === "/") e.preventDefault();
+    if (!e.repeat) onKey(k);
+  });
+  window.addEventListener("keyup", (e) => {
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (e.key === "Shift") { if (shiftDown && !shiftUsed) showMap = !showMap; shiftDown = false; return; }
+    keys[k] = false;
+  });
+
+  function update(p, dt) {
+    if (p.inside) { // dentro de un edificio: camina por la sala y sal por la puerta de abajo
+      const k0 = p.controls;
+      const dx = (keys[k0.right] ? 1 : 0) - (keys[k0.left] ? 1 : 0), dy = (keys[k0.down] ? 1 : 0) - (keys[k0.up] ? 1 : 0);
+      if (dx && p.sword) p.facing = dx;
+      p.ix = Math.max(14, Math.min(ROOM.w - 54, p.ix + dx * p.speed * dt));
+      p.iy = Math.max(44, Math.min(ROOM.h - 52, p.iy + dy * p.speed * dt));
+      const tx = (dx || dy) ? dx : (p.idle.x ? p.facing : 0), ty = (dx || dy) ? dy : p.idle.y, len = Math.hypot(tx, ty) || 1;
+      p.look.x = tx / len; p.look.y = ty / len;
+      if (dy > 0 && p.iy >= ROOM.h - 52 && Math.abs(p.ix + 20 - ROOM.w / 2) < 30) { // sale por la puerta
+        const b = p.inside; p.inside = null; p.x = b.x + 12; p.y = b.y + 24; p.enterCd = 1.2;
+      }
+      return;
+    }
+    if (blocked(p.x, p.y)) [p.x, p.y] = freePos(p.x, p.y); // nunca se queda atascado en el agua
+    const c = p.controls;
+    const dx = (keys[c.right] ? 1 : 0) - (keys[c.left] ? 1 : 0);
+    const dy = (keys[c.down] ? 1 : 0) - (keys[c.up] ? 1 : 0);
+    const sp = p.speed * (p.horse ? 1.8 : 1); // el caballo corre más
+    const nx = p.x + dx * sp * dt, ny = p.y + dy * sp * dt;
+    if (!blocked(nx, p.y)) p.x = nx; // el agua no se cruza, solo por los puentes
+    if (!blocked(p.x, ny)) p.y = ny;
+
+    // En movimiento miran hacia donde van; quietos, hacia su dirección de reposo
+    if (p.sword && dx) p.facing = dx; // al ir a un lado, la espada y los ojos cambian a ese lado
+    const tx = (dx || dy) ? dx : (p.idle.x ? p.facing : 0);
+    const ty = (dx || dy) ? dy : p.idle.y;
+    const len = Math.hypot(tx, ty);
+    p.look.x = tx / len;
+    p.look.y = ty / len;
+
+    // Mantener dentro del área de juego
+    const marginL = p.sword && p.facing < 0 ? 34 : 13;
+    const marginR = p.sword && p.facing > 0 ? 34 : 13;
+    p.x = Math.max(marginL, Math.min(WORLD.w - p.size - marginR, p.x));
+    p.y = Math.max(40, Math.min(WORLD.h - p.size - 44, p.y));
+  }
+
+  function drawCharacter(p) {
+    const bx = p.x, by = p.y, bs = p.size, r = 4, tip = 12;
+    const bh = bs + 8; // alto del cuerpo: un poco más largo que ancho
+    if (p.horse && !p.peace) drawHorse(bx, by + bh, p.facing);
+
+    // Sombra en el suelo, justo donde apunta el triángulo
+    ctx.save();
+    ctx.translate(bx + bs / 2, by + bh + tip + 14);
+    ctx.scale(1, 0.3);
+    const sh = ctx.createRadialGradient(0, 0, 0, 0, 0, 26);
+    sh.addColorStop(0, "rgba(0, 0, 0, 0.5)");
+    sh.addColorStop(0.6, "rgba(0, 0, 0, 0.25)");
+    sh.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.arc(0, 0, 26, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // La espada va pegada al cuerpo, por detrás del rectángulo lateral
+    if (p.sword && !p.peace) drawSword(p.facing > 0 ? bx + bs + 13 : bx - 13, by + 14, p.facing, p.sword, p.form);
+
+    // Cuerpo: esquinas suaves y un triángulo hacia abajo
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by);
+    ctx.lineTo(bx + bs - r, by);
+    ctx.arcTo(bx + bs, by, bx + bs, by + r, r);
+    ctx.lineTo(bx + bs, by + bh);
+    ctx.arcTo(bx + bs / 2, by + bh + tip, bx, by + bh, 5);
+    ctx.lineTo(bx, by + bh);
+    ctx.lineTo(bx, by + r);
+    ctx.arcTo(bx, by, bx + r, by, r);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+
+    if (!p.peace) { // (sin casco, rectángulos ni kanji en modo paz)
+    // Casco: rectángulo dorado (más grande en la forma 3)
+    const f3 = p.form === 3;
+    ctx.fillStyle = GOLD;
+    ctx.fillRect(bx - 3 - (f3 ? 2 : 0), by - 8 - (f3 ? 3 : 0), bs + 6 + (f3 ? 4 : 0), 11 + (f3 ? 3 : 0));
+    // Triángulo encima del casco
+    ctx.beginPath();
+    ctx.moveTo(bx + bs / 2 - 14, by - 8);
+    ctx.lineTo(bx + bs / 2, by - (f3 ? 23 : 20));
+    ctx.lineTo(bx + bs / 2 + 14, by - 8);
+    ctx.closePath();
+    ctx.fill();
+
+    // Gema entre el triángulo y el rectángulo
+    const gx = bx + bs / 2, gy = by - 8 - (f3 ? 3 : 0);
+    ctx.save();
+    if (f3) { ctx.translate(gx, gy); ctx.scale(1.7, 1.7); ctx.translate(-gx, -gy); }
+    ctx.fillStyle = p.gem.main;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - 7);
+    ctx.lineTo(gx + 6, gy);
+    ctx.lineTo(gx, gy + 7);
+    ctx.lineTo(gx - 6, gy);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = p.gem.light;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - 7);
+    ctx.lineTo(gx - 6, gy);
+    ctx.lineTo(gx, gy + 7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = p.gem.edge;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy - 7);
+    ctx.lineTo(gx + 6, gy);
+    ctx.lineTo(gx, gy + 7);
+    ctx.lineTo(gx - 6, gy);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+
+    // Rectángulos dorados a los lados de la cara
+    ctx.fillStyle = GOLD;
+    const rh = p.form > 1 ? 44 : 36; // más altos para que quepa “forma”
+    ctx.fillRect(bx - 11, by + 3, 12, rh);
+    ctx.fillRect(bx + bs - 1, by + 3, 12, rh);
+    // Triángulos encima de cada rectángulo lateral
+    ctx.beginPath();
+    ctx.moveTo(bx - 11, by + 3);
+    ctx.lineTo(bx - 5, by - 9);
+    ctx.lineTo(bx + 1, by + 3);
+    ctx.closePath();
+    ctx.moveTo(bx + bs - 1, by + 3);
+    ctx.lineTo(bx + bs + 5, by - 9);
+    ctx.lineTo(bx + bs + 11, by + 3);
+    ctx.closePath();
+    ctx.fill();
+
+    // Texto vertical en japonés: izquierda “guardián”, derecha el color
+    ctx.fillStyle = "#4a3200";
+    ctx.font = "bold 10px 'Noto Sans JP', 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ["守", "護", "者"].forEach((ch, i) => ctx.fillText(ch, bx - 5, by + 9 + (rh - 36) / 2 + i * 12));
+    if (p.form === 1) ctx.fillText(p.kanji, bx + bs + 5, by + 21);
+    else [p.kanji, "形", "態", String(p.form)].forEach((ch, i) => ctx.fillText(ch, bx + bs + 5, by + 9 + i * 11)); // color + “forma 2/3”
+
+    }
+    // Ojos: blancos con pupila que mira hacia donde se mueve
+    for (const ex of [0.3, 0.7]) {
+      const cx = bx + bs * ex;
+      const cy = by + bs * 0.38 + 5;
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#111111";
+      ctx.beginPath();
+      ctx.arc(cx + p.look.x * 3, cy + p.look.y * 3, 3.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Cejas y boca: enojado en combate; sonriente en paz
+    ctx.strokeStyle = "#111111"; ctx.lineCap = "round";
+    if (!p.peace) {
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(bx + 4, by + 10); ctx.lineTo(bx + 18, by + 16);
+      ctx.moveTo(bx + 36, by + 10); ctx.lineTo(bx + 22, by + 16);
+      ctx.stroke();
+    }
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    if (p.peace) ctx.arc(bx + bs / 2, by + bs * 0.58 + 5, 8, Math.PI * 0.15, Math.PI * 0.85);
+    else ctx.arc(bx + bs / 2, by + bs * 0.95 + 5, 8, Math.PI * 1.15, Math.PI * 1.85);
+    ctx.stroke();
+    if (!p.peace) drawHealthBar(bx + bs / 2, by - 36, p.hp / p.maxHp);
+  }
+
+  // Barra de vida encima del personaje (cx = centro, y = borde de arriba)
+  function drawHealthBar(cx, y, ratio) {
+    const w = 48, h = 7, x = cx - w / 2;
+    ratio = Math.max(0, Math.min(1, ratio));
+    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.fillRect(x - 1.5, y - 1.5, w + 3, h + 3);
+    ctx.fillStyle = ratio > 0.5 ? "#3fd16a" : ratio > 0.25 ? "#f2c230" : "#e5412d";
+    ctx.fillRect(x, y, w * ratio, h);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+    ctx.fillRect(x, y, w * ratio, 2);
+  }
+
+  // Espada vertical con mango azul y gemas azules (sx = centro, sy = arriba del personaje)
+  function drawSword(sx, sy, dir, c, form) {
+    // Inclinada hacia afuera, girando alrededor del mango
+    ctx.save();
+    ctx.translate(sx, sy + 22);
+    ctx.rotate(0.25 * dir);
+    ctx.translate(-sx, -(sy + 22));
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 1.5;
+    // Hoja plateada
+    ctx.fillStyle = "#cfd6df";
+    ctx.strokeStyle = "#7b8594";
+    ctx.beginPath();
+    if (form > 1) { // katana: hoja larga, fina y curva
+      ctx.moveTo(sx - 2.5, sy + 10);
+      ctx.quadraticCurveTo(sx - 2.5, sy - 16, sx + 3, sy - 34);
+      ctx.quadraticCurveTo(sx + 4.5, sy - 14, sx + 2.5, sy + 10);
+    } else {
+      ctx.moveTo(sx - 3.5, sy + 10);
+      ctx.lineTo(sx - 3.5, sy - 18);
+      ctx.lineTo(sx, sy - 27);
+      ctx.lineTo(sx + 3.5, sy - 18);
+      ctx.lineTo(sx + 3.5, sy + 10);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "#f4f7fb";
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy + 8);
+    ctx.lineTo(sx, sy - 18);
+    ctx.stroke();
+    // Mango azul
+    ctx.fillStyle = c.handle;
+    ctx.strokeStyle = c.edge;
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(sx - 3, sy + 14, 6, 17);
+    ctx.strokeRect(sx - 3, sy + 14, 6, 17);
+    // Guarda azul
+    const gw = form > 1 ? 7 : 10; // la katana tiene guarda más pequeña
+    ctx.fillRect(sx - gw, sy + 10, gw * 2, 5);
+    ctx.strokeRect(sx - gw, sy + 10, gw * 2, 5);
+    // Gemas azules: centro de la guarda, extremos y pomo
+    const gems = form > 1 ? [[sx, sy + 12.5, 4.5], [sx, sy + 34, 4]] : [[sx, sy + 12.5, 4.5], [sx - 7.5, sy + 12.5, 2.2], [sx + 7.5, sy + 12.5, 2.2], [sx, sy + 34, 4]];
+    for (const [gx2, gy2, gr] of gems) {
+      ctx.fillStyle = c.gem;
+      ctx.beginPath();
+      ctx.moveTo(gx2, gy2 - gr);
+      ctx.lineTo(gx2 + gr, gy2);
+      ctx.lineTo(gx2, gy2 + gr);
+      ctx.lineTo(gx2 - gr, gy2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = c.light;
+      ctx.beginPath();
+      ctx.moveTo(gx2, gy2 - gr);
+      ctx.lineTo(gx2 - gr, gy2);
+      ctx.lineTo(gx2, gy2 + gr);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = c.gemEdge;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(gx2, gy2 - gr);
+      ctx.lineTo(gx2 + gr, gy2);
+      ctx.lineTo(gx2, gy2 + gr);
+      ctx.lineTo(gx2 - gr, gy2);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  let last = performance.now();
+  function loop(now) {
+    if (!started) { drawMenu(); last = now; requestAnimationFrame(loop); return; }
+    const dt = paused ? 0 : Math.min((now - last) / 1000, 0.05);
+    notice.t -= dt; banner.t -= dt; dreamFx = Math.max(0, dreamFx - dt);
+    idleT = Object.values(keys).some(Boolean) ? 0 : idleT + dt; // 1 minuto sin tocar nada = pausa
+    if (idleT > 60 && !paused) { paused = true; idleT = 0; }
+    last = now;
+    if (battle) {
+      for (const q of players) if (q !== battle.a && q !== battle.b && !q.hidden) { update(q, dt); tickEvolution(q, dt); } // los demás siguen jugando
+      if (battle.over) { if ((battle.timer -= dt) <= 0) endBattle(); }
+      else {
+        const att = battle.turn ? battle.b : battle.a, def = battle.turn ? battle.a : battle.b;
+        if (att.isMonster) { if ((battle.wait -= dt) <= 0) doAttack(att, def); } // el coso ataca solo en su turno
+        else if (def.isMonster && (battle.idle -= dt) <= 0) {
+          if (att.pets.some((t) => t.bagT <= 0)) { // tu coso mascota pelea por ti y el coso no te pega
+            doAttack(att, def);
+            if (!battle.over) { battle.turn ^= 1; battle.msg = "Tu coso mascota ataca por ti. " + battle.msg; }
+          } else { // si no atacas a tiempo, el coso aprovecha
+            battle.turn = 1; doAttack(def, att);
+            if (!battle.over) battle.msg = "¡Te distrajiste! " + battle.msg;
+          }
+        }
+      }
+    } else {
+      for (const q of players) {
+        if (!showMap) update(q, dt); // mirando el mapa no se puede caminar
+        tickEvolution(q, dt); petTick(q, dt); horseTick(q);
+        const c = cityAt(q.x + 20, q.y + 24);
+        if (c !== q.city) { q.city = c; if (c && !q.inside) banner = { text: c.name, t: 3 }; } // título al llegar a una ciudad
+        q.enterCd = (q.enterCd || 0) - dt;
+        if (!q.inside && q.enterCd <= 0) { // entrar por la puerta de un edificio con nombre
+          const b = BUILDINGS.find((z) => z.name && inRect(q.x + 20, q.y + 40, [z.x + 22, z.y + z.h, 20, 14]));
+          if (b) { q.inside = b; q.ix = ROOM.w / 2 - 20; q.iy = ROOM.h - 100; banner = { text: "Entraste a " + b.name, t: 3 }; if (b.name === "Posada del Alba") posadaStay(q); }
+        }
+      }
+      updateMonsters(dt);
+      updateNpcs(dt);
+      cooldown -= dt;
+      if (cooldown <= 0) { const f = findBattle(); if (f) startBattle(f[0], f[1]); }
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Después de las 6 p. m. el fondo (y la página) se oscurecen; los personajes no
+    const night = isNight();
+    document.body.style.background = night ? "#0b0f1a" : "";
+    document.body.style.color = night ? "#e6e8ee" : "";
+    drawViews(night);
+    drawHud();
+    if (showMap) drawMap();
+    if (showInfo) drawHelp();
+    drawBanner();
+    drawDream();
+
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+</script>
+</body>
+</html>
