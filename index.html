@@ -2,6 +2,9 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
+
+ <link rel="icon" type="image/png" href="favicon de 2.PNG">
+  
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>The Last Guardians</title>
 <style>
@@ -50,17 +53,36 @@
     touch-action: none;
   }
   p { margin: 0; font-size: 0.95rem; opacity: 0.8; }
+  :fullscreen { background: #000; }
+  :fullscreen canvas { max-width: none; width: min(100vw, calc(100vh * 4 / 3)); height: auto; border-radius: 0; border: none; }
 </style>
 </head>
 <body>
   <canvas id="c" width="480" height="360"></canvas>
 
-<h1>----------------------------------Solo para computador.-------------------------------------                        
-  Si un coso te vence varias veces, no es que sea imposible vencerlo, a veces se distraen y algunos golpes los confunden</h1>
+
+<h1>----------------------------------Solo para computador.-------------------------------------                           Si un coso te vence varias veces,
+  no es que sea imposible vencerlo, a veces se distraen y algunos golpes los confunden</h1>
+
   
 <script>
   const canvas = document.getElementById("c");
   const ctx = canvas.getContext("2d");
+  // ---- Pantalla completa: Esc la cierra; al subir el mouse aparece una X redonda arriba al centro ----
+  const fsBtn = document.createElement("button");
+  fsBtn.textContent = "✕"; fsBtn.setAttribute("aria-label", "Salir de pantalla completa");
+  fsBtn.style.cssText = "position:fixed;top:14px;left:50%;transform:translateX(-50%);width:46px;height:46px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.7);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:none;z-index:10";
+  document.body.appendChild(fsBtn);
+  fsBtn.addEventListener("click", () => { if (document.exitFullscreen) document.exitFullscreen(); });
+  let fsHide = 0;
+  window.addEventListener("mousemove", (e) => {
+    if (!document.fullscreenElement || e.clientY > 70) return;
+    fsBtn.style.display = "block"; clearTimeout(fsHide); fsHide = setTimeout(() => { fsBtn.style.display = "none"; }, 2500);
+  });
+  document.addEventListener("fullscreenchange", () => { if (!document.fullscreenElement) fsBtn.style.display = "none"; });
+  function goFullscreen() {
+    try { const el = document.documentElement; if (!document.fullscreenElement && el.requestFullscreen) el.requestFullscreen().catch(() => {}); } catch (e) {}
+  }
   const GOLD = "#e3b52b";
   // Mundo 3 veces más grande que la pantalla
   const WORLD = { w: 6000, h: 4500 };
@@ -450,7 +472,7 @@
   const MENU = [["1 jugador", 1, false], ["2 jugadores", 2, false], ["2 jugadores · cooperativo", 2, true], ["3 jugadores", 3, false], ["3 jugadores · cooperativo", 3, true]];
   const SLOTS = ["1", "2", "2c", "3", "3c"]; // una partida por cada botón del menú
   const GAME_TITLE = "The Last Guardians"; // nombre del juego
-  let stage = "home", safeMode = false, happyMode = false, modeName = "Modo normal", modeIdx = 0, nameIdx = 0, nameBuf = "", coop = false; // coop: los guardianes no se pelean entre sí
+  let stage = "title", safeMode = false, happyMode = false, modeName = "Modo normal", modeIdx = 0, nameIdx = 0, nameBuf = "", coop = false; // coop: los guardianes no se pelean entre sí
   const ALL_PLAYERS = [...players]; // los tres, para poder volver al menú
   // R + . : vuelve al inicio (menú) sin borrar nada
   function goMenu() {
@@ -496,7 +518,8 @@
   }
   function finishGame() { started = true; stage = "menu"; audio(); }
   function menuKey(e, k) {
-    if (stage === "home") { const i = "123".indexOf(k); if (k.length === 1 && i >= 0) { setMode(i); stage = "menu"; } return; }
+    if (stage === "title") { if (e.key === "Enter" || e.key === " ") { startFromTitle(); e.preventDefault(); } return; }
+    if (stage === "home") { if (e.key === "Backspace") { stage = "title"; e.preventDefault(); return; } const i = "123".indexOf(k); if (k.length === 1 && i >= 0) { setMode(i); stage = "menu"; } return; }
     if (stage === "menu") { if (e.key === "Backspace") { stage = "home"; e.preventDefault(); return; } const i = "12345".indexOf(k); if (k.length === 1 && i >= 0) chooseMode(i); return; }
     // Elegir nombre (solo al inicio): escribe, Retroceso borra, Enter confirma
     if (e.key === "Enter") {
@@ -511,7 +534,40 @@
     }
     else if (e.key.length === 1 && nameBuf.length < 12) { nameBuf += e.key; if (e.key === " ") e.preventDefault(); }
   }
+  function startFromTitle() { stage = "home"; goFullscreen(); } // "Jugar": pantalla completa y las tres opciones
+  function drawTitle() {
+    const w = canvas.width, t = performance.now() / 1000;
+    const bg = ctx.createLinearGradient(0, 0, 0, canvas.height); bg.addColorStop(0, "#0b1030"); bg.addColorStop(1, "#2a1238");
+    ctx.save();
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, w, canvas.height);
+    for (let i = 0; i < 46; i++) { // estrellas que titilan
+      const a = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.4 + i * 1.7));
+      ctx.fillStyle = "rgba(255, 255, 255, " + a.toFixed(2) + ")"; ctx.fillRect((i * 97) % w, (i * 53) % 230 + 6, i % 5 ? 2 : 3, i % 5 ? 2 : 3);
+    }
+    const gem = (x, y, col, light) => { // gemas decorativas
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(x, y - 16); ctx.lineTo(x + 11, y); ctx.lineTo(x, y + 16); ctx.lineTo(x - 11, y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = light; ctx.beginPath(); ctx.moveTo(x, y - 16); ctx.lineTo(x - 11, y); ctx.lineTo(x, y + 16); ctx.closePath(); ctx.fill();
+    };
+    gem(62, 110, "#35a2ff", "#a9dcff"); gem(w - 62, 110, "#ff4d4d", "#ffb3b3"); gem(w / 2 - 190, 150, "#3fd16a", "#aef0c3"); gem(w / 2 + 190, 150, "#ffd23f", "#fff3b0");
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = "italic bold 34px Georgia, serif"; ctx.fillStyle = "#cfd8ff"; ctx.shadowColor = "#7f9bff"; ctx.shadowBlur = 12; ctx.fillText("The Last", w / 2, 84);
+    const gold = ctx.createLinearGradient(0, 104, 0, 166); gold.addColorStop(0, "#fff3b0"); gold.addColorStop(0.5, "#f2c230"); gold.addColorStop(1, "#b8781a");
+    ctx.font = "bold 66px Georgia, serif"; ctx.shadowColor = "#f2c230"; ctx.shadowBlur = 22;
+    ctx.lineWidth = 7; ctx.strokeStyle = "#4a2c0a"; ctx.lineJoin = "round"; ctx.strokeText("Guardians", w / 2, 138, 430);
+    ctx.fillStyle = gold; ctx.fillText("Guardians", w / 2, 138, 430);
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = "#f2c230"; ctx.lineWidth = 2; // adorno bajo el título
+    ctx.beginPath(); ctx.moveTo(w / 2 - 150, 188); ctx.lineTo(w / 2 - 14, 188); ctx.moveTo(w / 2 + 14, 188); ctx.lineTo(w / 2 + 150, 188); ctx.stroke();
+    ctx.fillStyle = "#f2c230"; ctx.beginPath(); ctx.moveTo(w / 2, 178); ctx.lineTo(w / 2 + 8, 188); ctx.lineTo(w / 2, 198); ctx.lineTo(w / 2 - 8, 188); ctx.closePath(); ctx.fill();
+    const k = 1 + 0.04 * Math.sin(t * 3); // el botón "Jugar" late suavemente
+    ctx.translate(w / 2, 285); ctx.scale(k, k);
+    const bgb = ctx.createLinearGradient(0, -23, 0, 23); bgb.addColorStop(0, "#4ade80"); bgb.addColorStop(1, "#15803d");
+    ctx.fillStyle = bgb; ctx.fillRect(-70, -23, 140, 46); ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.strokeRect(-70, -23, 140, 46);
+    ctx.fillStyle = "#fff"; ctx.font = "bold 24px system-ui, sans-serif"; ctx.fillText("Jugar", 0, 1);
+    ctx.restore();
+  }
   function drawMenu() {
+    if (stage === "title") { drawTitle(); return; }
     const w = canvas.width / 2;
     ctx.save();
     ctx.fillStyle = "#101820"; ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -549,8 +605,9 @@
     ctx.restore();
   }
   canvas.addEventListener("click", (e) => {
-    if (started || (stage !== "menu" && stage !== "home")) return;
+    if (started || stage === "names") return;
     const r = canvas.getBoundingClientRect(), x = (e.clientX - r.left) * canvas.width / r.width, y = (e.clientY - r.top) * canvas.height / r.height;
+    if (stage === "title") { if (x >= 170 && x <= 310 && y >= 262 && y <= 308) startFromTitle(); return; }
     if (stage === "home") { [0, 1, 2].forEach((i) => { const by = 84 + i * 66; if (x >= 90 && x <= 390 && y >= by && y <= by + 52) { setMode(i); stage = "menu"; } }); return; }
     MENU.forEach((_, i) => { const by = 82 + i * 46; if (x >= 90 && x <= 390 && y >= by && y <= by + 38) chooseMode(i); });
   });
@@ -701,7 +758,7 @@
       lose.money = 0; lose.weapons = 0; lose.level = 5; lose.xp = 0; // pierde todo y vuelve al nivel 5
       lose.form = 1; lose.evo = null; lose.noEvoBefore = 0; lose.kills = 0; lose.bags = 0; lose.pets = []; lose.potions = 0; lose.hypers = 0; lose.gun = 0; lose.horse = false; setStats(lose); // perder borra su cuenta de cosos
     }
-    for (const [q, x, y] of battle.saved) { if (q === battle.a || q === battle.b) { q.x = x; q.y = y; } q.hidden = false; q.hp = q.maxHp; }
+    for (const [q, x, y] of battle.saved) { if (q === battle.a || q === battle.b) { q.x = x; q.y = y; } q.hidden = false; if (q === lose || q.isMonster) q.hp = q.maxHp; } // el ganador conserva la vida con la que terminó
     if (!lose.isMonster) respawnAtSave(lose); // reaparece donde guardó (o en el Gremio si nunca guardó)
     battle = null; cooldown = 1.5;
     checkVictory();
